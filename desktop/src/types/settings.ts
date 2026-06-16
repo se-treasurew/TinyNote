@@ -1,4 +1,11 @@
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode =
+  | 'system'
+  | 'glass-blue'
+  | 'glass-white'
+  | 'glass-mint'
+  | 'glass-violet'
+  | 'light'
+  | 'dark';
 
 export interface AppSettings {
   visibleDays: 3 | 7 | 14;
@@ -29,7 +36,7 @@ export const defaultSettings: AppSettings = {
   startMinimizedToTray: false,
   lockWindow: false,
   alwaysOnTop: false,
-  opacity: 0.96,
-  theme: 'system',
-  fontSize: 14,
+  opacity: 0.82,
+  theme: 'glass-blue',
+  fontSize: 13,
 };

@@ -33,7 +33,13 @@ export class SettingsService {
   }
 
   private async applyNativeSetting<K extends AppSettingKey>(key: K, value: AppSettings[K]): Promise<void> {
-    if (key === 'lockWindow' || key === 'alwaysOnTop' || key === 'opacity') {
+    if (
+      key === 'lockWindow' ||
+      key === 'alwaysOnTop' ||
+      key === 'opacity' ||
+      key === 'theme' ||
+      key === 'fontSize'
+    ) {
       const settings = await settingsRepository.load();
       await windowService.applySettings(settings);
     }

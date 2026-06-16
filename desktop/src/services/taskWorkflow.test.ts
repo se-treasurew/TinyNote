@@ -5,6 +5,7 @@ import {
   applyDelete,
   applyRestore,
   groupActiveTasksByDate,
+  groupDateDisplayTasksByDate,
   hasActiveTaskOnDate,
 } from './taskWorkflow';
 import type { Task } from '../types/task';
@@ -80,5 +81,20 @@ describe('task workflow rules', () => {
     });
     expect(hasActiveTaskOnDate(tasks, '2026-06-16')).toBe(true);
     expect(hasActiveTaskOnDate(tasks, '2026-06-17')).toBe(false);
+  });
+
+  it('groups active, completed, and archived tasks for the main date display', () => {
+    const tasks = [
+      baseTask({ id: 'active', taskDate: '2026-06-16', status: 'active', sortOrder: 1 }),
+      baseTask({ id: 'completed', taskDate: '2026-06-16', status: 'completed', sortOrder: 0 }),
+      baseTask({ id: 'archived', taskDate: '2026-06-16', status: 'archived' }),
+      baseTask({ id: 'deleted', taskDate: '2026-06-16', status: 'deleted' }),
+    ];
+
+    const grouped = groupDateDisplayTasksByDate(tasks);
+
+    expect(grouped).toEqual({
+      '2026-06-16': [tasks[0], tasks[1], tasks[2]],
+    });
   });
 });

@@ -1,5 +1,4 @@
 import { Archive, CalendarClock, Lock, Pin, PinOff, Settings, Unlock } from 'lucide-react';
-import { formatChineseDate, todayIsoDate } from '../utils/date';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUiStore } from '../stores/uiStore';
 import { windowService } from '../services/windowService';
@@ -18,8 +17,8 @@ export function TitleBar() {
       }}
     >
       <div className="title-copy">
-        <strong>TinyNote 小笺</strong>
-        <span>{formatChineseDate(todayIsoDate())}</span>
+        <strong>小笺</strong>
+        <span>v0.1.2</span>
       </div>
       <nav className="title-actions" onMouseDown={(event) => event.stopPropagation()}>
         <button type="button" title="Routine" aria-label="Routine" onClick={() => openPanel('routine')}>

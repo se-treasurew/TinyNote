@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CreateTaskInput, Task, TasksByDate, UpdateTaskInput } from '../types/task';
 import { taskService } from '../services/taskService';
-import { getActiveCountByDate, groupActiveTasksByDate } from '../services/taskWorkflow';
+import { getActiveCountByDate, groupDateDisplayTasksByDate } from '../services/taskWorkflow';
 import { getVisibleDateRange, todayIsoDate } from '../utils/date';
 import { routineService } from '../services/routineService';
 
@@ -10,10 +10,11 @@ interface TaskState {
   archiveTasks: Task[];
   tasksByDate: TasksByDate;
   visibleDates: string[];
+  visibleStartDate: string;
   visibleDays: number;
   selectedDate: string;
   isLoading: boolean;
-  loadTasks: (visibleDays?: number) => Promise<void>;
+  loadTasks: (visibleDays?: number, startDate?: string) => Promise<void>;
   loadArchive: () => Promise<void>;
   addTask: (input: CreateTaskInput) => Promise<void>;
   updateTask: (id: string, input: UpdateTaskInput) => Promise<void>;
@@ -30,26 +31,28 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   archiveTasks: [],
   tasksByDate: {},
   visibleDates: getVisibleDateRange(todayIsoDate(), 7),
+  visibleStartDate: todayIsoDate(),
   visibleDays: 7,
   selectedDate: todayIsoDate(),
   isLoading: false,
 
-  async loadTasks(visibleDays = get().visibleDays) {
+  async loadTasks(visibleDays = get().visibleDays, startDate = get().visibleStartDate) {
     set({ isLoading: true });
-    const startDate = todayIsoDate();
-    const visibleDates = getVisibleDateRange(startDate, visibleDays);
-    let tasks = await taskService.loadVisibleTasks(startDate, visibleDays);
+    const rangeStartDate = startDate || todayIsoDate();
+    const visibleDates = getVisibleDateRange(rangeStartDate, visibleDays);
+    let tasks = await taskService.loadVisibleTasks(rangeStartDate, visibleDays);
     const generated = await routineService.generateVisibleRoutineTasks(visibleDates, tasks);
     if (generated.length > 0) {
-      tasks = await taskService.loadVisibleTasks(startDate, visibleDays);
+      tasks = await taskService.loadVisibleTasks(rangeStartDate, visibleDays);
     }
 
     set({
       tasks,
-      tasksByDate: groupActiveTasksByDate(tasks),
+      tasksByDate: groupDateDisplayTasksByDate(tasks),
       visibleDates,
+      visibleStartDate: rangeStartDate,
       visibleDays,
-      selectedDate: get().selectedDate || startDate,
+      selectedDate: visibleDates.includes(get().selectedDate) ? get().selectedDate : rangeStartDate,
       isLoading: false,
     });
   },

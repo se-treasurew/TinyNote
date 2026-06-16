@@ -6,6 +6,7 @@ import { useRoutineStore } from '../stores/routineStore';
 import { useUiStore } from '../stores/uiStore';
 import { dataPortabilityService } from '../services/dataPortabilityService';
 import type { TinyNoteExport } from '../services/syncService';
+import type { ThemeMode } from '../types/settings';
 
 export function SettingsPanel() {
   const settings = useSettingsStore((state) => state.settings);
@@ -101,7 +102,7 @@ export function SettingsPanel() {
           <span>透明度</span>
           <input
             type="range"
-            min="0.72"
+            min="0.62"
             max="1"
             step="0.02"
             value={settings.opacity}
@@ -110,8 +111,16 @@ export function SettingsPanel() {
         </label>
         <label>
           <span>主题</span>
-          <select value={settings.theme} onChange={(event) => void updateSetting('theme', event.target.value as never)}>
+          <select
+            aria-label="主题"
+            value={settings.theme}
+            onChange={(event) => void updateSetting('theme', event.target.value as ThemeMode)}
+          >
             <option value="system">跟随系统</option>
+            <option value="glass-blue">玻璃蓝</option>
+            <option value="glass-white">玻璃白</option>
+            <option value="glass-mint">薄荷玻璃</option>
+            <option value="glass-violet">暮紫玻璃</option>
             <option value="light">浅色</option>
             <option value="dark">深色</option>
           </select>

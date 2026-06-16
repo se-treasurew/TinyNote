@@ -1,4 +1,4 @@
-import { Archive, CalendarDays, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Archive, CalendarDays, Check, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { Task } from '../types/task';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -16,7 +16,9 @@ export function TaskItem({ task }: TaskItemProps) {
   const completeTask = useTaskStore((state) => state.completeTask);
   const updateTask = useTaskStore((state) => state.updateTask);
   const archiveTask = useTaskStore((state) => state.archiveTask);
+  const restoreTask = useTaskStore((state) => state.restoreTask);
   const deleteTask = useTaskStore((state) => state.deleteTask);
+  const isDone = task.status === 'completed' || task.status === 'archived';
 
   async function saveTitle() {
     const next = title.trim();
@@ -33,14 +35,25 @@ export function TaskItem({ task }: TaskItemProps) {
     }
   }
 
+  async function toggleCompleted() {
+    if (isDone) {
+      await restoreTask(task.id);
+      return;
+    }
+
+    await completeTask(task.id, settings.completeToArchive);
+  }
+
   return (
-    <div className="task-item">
+    <div className={`task-item ${isDone ? 'completed' : ''}`} role="listitem">
       <button
         type="button"
-        className="check-button"
-        aria-label="完成任务"
-        onClick={() => void completeTask(task.id, settings.completeToArchive)}
-      />
+        className={`check-button ${isDone ? 'completed' : ''}`}
+        aria-label={`${isDone ? '恢复任务' : '完成任务'}：${task.title}`}
+        onClick={() => void toggleCompleted()}
+      >
+        {isDone && <Check size={13} />}
+      </button>
       <div className="task-main">
         {isEditing ? (
           <input
@@ -64,6 +77,7 @@ export function TaskItem({ task }: TaskItemProps) {
         <div className="task-tags">
           {task.sourceType === 'routine_daily' && <span>routine</span>}
           {task.sourceType === 'multi_day' && <span>多日</span>}
+          {task.status === 'archived' && <span>归档</span>}
           {task.taskDate < new Date().toISOString().slice(0, 10) && <span>过期</span>}
         </div>
       </div>
@@ -76,10 +90,12 @@ export function TaskItem({ task }: TaskItemProps) {
             <CalendarDays size={14} />
             <input type="date" value={date} onChange={(event) => void saveDate(event.target.value)} />
           </label>
-          <button type="button" onClick={() => void archiveTask(task.id)}>
-            <Archive size={14} />
-            <span>归档</span>
-          </button>
+          {task.status !== 'archived' && (
+            <button type="button" onClick={() => void archiveTask(task.id)}>
+              <Archive size={14} />
+              <span>归档</span>
+            </button>
+          )}
           <button type="button" onClick={() => void deleteTask(task.id)}>
             <Trash2 size={14} />
             <span>删除</span>
