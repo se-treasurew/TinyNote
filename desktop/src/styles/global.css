@@ -1,0 +1,485 @@
+:root {
+  color-scheme: light;
+  --window-opacity: 0.96;
+  --app-font-size: 14px;
+  --bg: rgba(247, 248, 245, var(--window-opacity));
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-strong: #ffffff;
+  --text: #242521;
+  --muted: #74786f;
+  --line: rgba(47, 57, 44, 0.12);
+  --accent: #31786d;
+  --accent-soft: #dcefeb;
+  --danger: #d94f45;
+  --shadow: 0 14px 36px rgba(36, 37, 33, 0.14);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: rgba(31, 32, 29, var(--window-opacity));
+  --panel: rgba(42, 44, 40, 0.9);
+  --panel-strong: #30332e;
+  --text: #f2f3ee;
+  --muted: #b5baae;
+  --line: rgba(240, 241, 235, 0.12);
+  --accent: #8fcfc4;
+  --accent-soft: rgba(143, 207, 196, 0.18);
+  --shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    color-scheme: dark;
+    --bg: rgba(31, 32, 29, var(--window-opacity));
+    --panel: rgba(42, 44, 40, 0.9);
+    --panel-strong: #30332e;
+    --text: #f2f3ee;
+    --muted: #b5baae;
+    --line: rgba(240, 241, 235, 0.12);
+    --accent: #8fcfc4;
+    --accent-soft: rgba(143, 207, 196, 0.18);
+    --shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: var(--app-font-size);
+  color: var(--text);
+  background: transparent;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+.app-shell {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 66px;
+  padding: 12px 12px 8px 16px;
+  user-select: none;
+}
+
+.title-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.title-copy strong {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.title-copy span,
+.date-card-header span,
+.task-tags,
+.archive-row span,
+.routine-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.title-actions,
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.title-actions button,
+.panel-header button,
+.panel-toolbar button,
+.icon-upload,
+.task-input button,
+.ghost-row-button,
+.check-button,
+.task-menu summary,
+.archive-row button,
+.routine-row button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.title-actions button:hover,
+.panel-header button:hover,
+.panel-toolbar button:hover,
+.icon-upload:hover,
+.ghost-row-button:hover,
+.task-menu summary:hover,
+.archive-row button:hover,
+.routine-row button:hover {
+  background: var(--accent-soft);
+}
+
+.quick-entry {
+  padding: 0 14px 10px;
+}
+
+.task-input,
+.inline-add {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.task-input input,
+.inline-add input,
+.task-main input,
+.panel-form input,
+.settings-grid input,
+.settings-grid select,
+.task-menu input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  color: var(--text);
+  outline: none;
+}
+
+.task-input input {
+  height: 38px;
+  padding: 0 12px;
+}
+
+.task-input button {
+  background: var(--accent);
+  color: white;
+}
+
+.date-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 14px;
+}
+
+.date-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.date-card.selected {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+}
+
+.date-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.date-card-header div {
+  display: grid;
+  gap: 2px;
+}
+
+.red-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.task-list {
+  display: grid;
+  gap: 6px;
+}
+
+.task-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 0;
+}
+
+.check-button {
+  width: 18px;
+  height: 18px;
+  border-color: var(--accent);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.check-button:hover {
+  background: var(--accent);
+}
+
+.task-main {
+  min-width: 0;
+}
+
+.task-title {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.task-tags {
+  display: flex;
+  gap: 4px;
+  min-height: 16px;
+}
+
+.task-tags span {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.task-main input,
+.inline-add input {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+}
+
+.task-menu {
+  position: relative;
+}
+
+.task-menu summary {
+  list-style: none;
+}
+
+.task-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-menu-popover {
+  position: absolute;
+  right: 0;
+  z-index: 4;
+  display: grid;
+  gap: 5px;
+  width: 168px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+
+.task-menu-popover button,
+.task-menu-popover label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.task-menu-popover input {
+  width: 100%;
+  height: 28px;
+}
+
+.ghost-row-button {
+  width: 100%;
+  height: 28px;
+  border-style: dashed;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.empty-copy {
+  margin: 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.panel {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.segmented button,
+.panel-form button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.segmented .active,
+.panel-form button {
+  background: var(--accent);
+  color: white;
+}
+
+.panel-form,
+.settings-grid {
+  display: grid;
+  gap: 9px;
+}
+
+.panel-form input {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.date-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.panel-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.archive-row,
+.routine-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.archive-row div,
+.routine-row div {
+  display: grid;
+  min-width: 0;
+}
+
+.archive-row strong,
+.routine-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-grid label {
+  display: grid;
+  grid-template-columns: minmax(78px, 1fr) minmax(86px, 1.2fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.settings-grid input:not([type='checkbox']),
+.settings-grid select {
+  height: 32px;
+  padding: 0 8px;
+}
+
+.settings-grid input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-upload {
+  position: relative;
+  overflow: hidden;
+}
+
+.icon-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.startup-error {
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  width: 100vw;
+  height: 100vh;
+  padding: 24px;
+  border-radius: 18px;
+  background: var(--bg);
+  color: var(--text);
+}
