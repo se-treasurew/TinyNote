@@ -38,8 +38,8 @@ npm.cmd run typecheck    # tsc --noEmit
 
 - **Repositories** (`src/repositories/`)：通过 `@tauri-apps/plugin-sql` 执行 SQL 查询。`db.ts` 是数据库单例，提供事务辅助和默认设置初始化。
 - **Services** (`src/services/`)：业务逻辑层。部分为纯函数（`taskWorkflow.ts`、`routineLogic.ts`），易于测试；其余封装 repository 调用。
-- **Stores** (`src/stores/`)：四个 Zustand store —— `taskStore`（任务、日期、CRUD）、`routineStore`（例行任务）、`settingsStore`（应用设置 + 原生开关）、`uiStore`（面板可见性）。
-- **Components/Pages**：`MainPage.tsx` 是主界面。`ArchivePanel`、`RoutinePanel`、`SettingsPanel` 为浮层面板组件。
+- **Stores** (`src/stores/`)：四个 Zustand store —— `taskStore`（任务、日期、CRUD、导航）、`routineStore`（例行任务）、`settingsStore`（应用设置 + 原生开关）、`uiStore`（面板可见性，支持 `main`/`archive`/`settings`/`taskManage` 四种面板）。
+- **Components/Pages**：`MainPage.tsx` 是主界面。`ArchivePanel`、`RoutinePanel`、`SettingsPanel`、`TaskManagePanel` 为浮层面板组件。
 
 **启动流程**（`app/App.tsx`）：初始化数据库 → 加载设置 → 加载例行任务 → 加载任务（为可见日期范围生成例行任务实例）→ 注册托盘事件监听。
 
@@ -48,6 +48,18 @@ npm.cmd run typecheck    # tsc --noEmit
 **数据模型**：5 张 SQLite 表 —— `tasks`、`routines`、`routine_instances`、`app_settings`、`sync_log`。所有写操作递增 `version`，设置 `sync_status` 为 `'pending'`，并写入 `sync_log` 为后续同步预留。
 
 **例行任务生成**：每日例行任务在 `loadTasks()` 时按可见日期范围惰性生成实例；多日例行任务在创建时一次性生成全部实例。通过 `UNIQUE(routine_id, instance_date)` 去重。
+
+## 任务类型与顺延逻辑
+
+三种任务类型 (`manual` / `daily` / `multi_day`) 的差异：
+
+| 行为 | 普通 (manual) | 每日 (daily) | 长期 (multi_day) |
+|------|:--:|:--:|:--:|
+| 跨日显示 | 仅当天 | [开始, 结束] 范围 | [开始, 结束] 范围 |
+| 进度顺延 | ❌ 永不 | ❌ 每天清零 | ✅ 当日及之前继承 |
+| 完成机制 | 改任务自身状态 | 写 per-date progress entry | 写 per-date progress entry |
+
+核心逻辑在 `src/services/taskOccurrence.ts`：`shouldShowTaskOnDate` 控制可见性，`shouldCarryProgress` 控制进度继承（仅 multi_day + carryProgressForward=true + date <= today）。
 
 ## 关键技术细节
 
@@ -59,4 +71,4 @@ npm.cmd run typecheck    # tsc --noEmit
 
 ## 版本
 
-当前版本 0.1.5 —— 需同步更新 `package.json`、`Cargo.toml`、`tauri.conf.json` 和 `TitleBar` 组件中的版本号。
+当前版本 0.1.11 —— 需同步更新 `package.json`、`Cargo.toml`、`tauri.conf.json` 和 `TitleBar` 组件中的版本号。

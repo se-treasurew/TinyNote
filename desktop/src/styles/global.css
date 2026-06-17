@@ -45,6 +45,36 @@
   --art-3: rgba(255, 255, 255, 0.32);
 }
 
+:root[data-theme='glass-white'] .tag-manual,
+:root[data-theme='light'] .tag-manual {
+  background: rgba(37, 99, 235, 0.12) !important;
+  color: #2563eb;
+}
+
+:root[data-theme='glass-white'] .tag-daily,
+:root[data-theme='light'] .tag-daily {
+  background: rgba(5, 150, 105, 0.12) !important;
+  color: #059669;
+}
+
+:root[data-theme='glass-white'] .tag-multi,
+:root[data-theme='light'] .tag-multi {
+  background: rgba(217, 119, 6, 0.12) !important;
+  color: #d97706;
+}
+
+:root[data-theme='glass-white'] .tag-archived,
+:root[data-theme='light'] .tag-archived {
+  background: rgba(100, 116, 139, 0.12) !important;
+  color: #64748b;
+}
+
+:root[data-theme='glass-white'] .tag-overdue,
+:root[data-theme='light'] .tag-overdue {
+  background: rgba(225, 29, 72, 0.12) !important;
+  color: #e11d48;
+}
+
 :root[data-theme='glass-mint'] {
   color-scheme: dark;
   --bg-rgb: 6 36 35;
@@ -500,6 +530,31 @@ button {
   background: var(--accent-soft);
   font-size: 10px;
   line-height: 1.4;
+}
+
+.tag-manual {
+  background: rgba(96, 165, 250, 0.18) !important;
+  color: #60a5fa;
+}
+
+.tag-daily {
+  background: rgba(52, 211, 153, 0.18) !important;
+  color: #34d399;
+}
+
+.tag-multi {
+  background: rgba(251, 191, 36, 0.18) !important;
+  color: #fbbf24;
+}
+
+.tag-archived {
+  background: rgba(148, 163, 184, 0.18) !important;
+  color: #94a3b8;
+}
+
+.tag-overdue {
+  background: rgba(251, 113, 133, 0.18) !important;
+  color: #fb7185;
 }
 
 .task-progress {

@@ -89,11 +89,11 @@ export function TaskItem({ task }: TaskItemProps) {
         )}
         <div className="task-meta">
           <div className="task-tags">
-            {task.sourceType === 'manual' && <span>普通</span>}
-            {task.sourceType === 'daily' && <span>每日</span>}
-            {task.sourceType === 'multi_day' && <span>长期</span>}
-            {task.status === 'archived' && <span>归档</span>}
-            {task.taskDate < new Date().toISOString().slice(0, 10) && <span>过期</span>}
+            {task.sourceType === 'manual' && <span className="tag-manual">普通</span>}
+            {task.sourceType === 'daily' && <span className="tag-daily">每日</span>}
+            {task.sourceType === 'multi_day' && <span className="tag-multi">长期</span>}
+            {task.status === 'archived' && <span className="tag-archived">归档</span>}
+            {task.taskDate < new Date().toISOString().slice(0, 10) && <span className="tag-overdue">过期</span>}
           </div>
           {task.status === 'active' && (
             <div className="task-progress">
