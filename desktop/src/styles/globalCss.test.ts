@@ -16,4 +16,10 @@ describe('global glass background CSS', () => {
     expect(css).toContain('--custom-background-image');
     expect(css).toContain('var(--custom-background-image)');
   });
+
+  it('keeps the transparent window outside the rounded shell clear', () => {
+    expect(css).toContain('html,\nbody,\n#root');
+    expect(css).toContain('background: transparent;');
+    expect(css).toContain('clip-path: inset(0 round 18px)');
+  });
 });
