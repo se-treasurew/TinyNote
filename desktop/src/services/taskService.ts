@@ -48,11 +48,9 @@ export class TaskService {
     }));
 
     await taskRepository.insertMany(tasks);
-    await Promise.all(
-      tasks.map((task) =>
-        writeSyncLog({ entityType: 'task', entityId: task.id, operation: 'create', payload: task }),
-      ),
-    );
+    for (const task of tasks) {
+      await writeSyncLog({ entityType: 'task', entityId: task.id, operation: 'create', payload: task });
+    }
     return tasks;
   }
 

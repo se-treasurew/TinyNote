@@ -55,13 +55,11 @@ export class RoutineService {
       now,
     });
     const tasks = drafts.map((draft) => ({ ...draft, id: draft.id ?? createId('task') }));
-    await routineRepository.createTasksWithInstances(tasks);
-    await Promise.all(
-      tasks.map((task) =>
-        writeSyncLog({ entityType: 'task', entityId: task.id, operation: 'create', payload: task }),
-      ),
-    );
-    return { routine, tasks };
+    const insertedTasks = await routineRepository.createTasksWithInstances(tasks);
+    for (const task of insertedTasks) {
+      await writeSyncLog({ entityType: 'task', entityId: task.id, operation: 'create', payload: task });
+    }
+    return { routine, tasks: insertedTasks };
   }
 
   async setEnabled(id: string, isEnabled: boolean): Promise<Routine> {
@@ -120,13 +118,11 @@ export class RoutineService {
     }
 
     const tasks = drafts.map((draft) => ({ ...draft, id: draft.id ?? createId('task') }));
-    await routineRepository.createTasksWithInstances(tasks);
-    await Promise.all(
-      tasks.map((task) =>
-        writeSyncLog({ entityType: 'task', entityId: task.id, operation: 'create', payload: task }),
-      ),
-    );
-    return tasks;
+    const insertedTasks = await routineRepository.createTasksWithInstances(tasks, { priority: 'background' });
+    for (const task of insertedTasks) {
+      await writeSyncLog({ entityType: 'task', entityId: task.id, operation: 'create', payload: task });
+    }
+    return insertedTasks;
   }
 }
 

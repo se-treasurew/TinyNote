@@ -53,7 +53,9 @@ export function MainPage() {
   }
 
   async function clearCompletedTasks() {
-    await Promise.all(doneTasks.map((task) => deleteTask(task.id)));
+    for (const task of doneTasks) {
+      await deleteTask(task.id);
+    }
   }
 
   return (

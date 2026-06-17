@@ -1,4 +1,11 @@
-import { getDb, runInTransaction, type TinyNoteDatabase } from './db';
+import {
+  executeInTransaction,
+  executeWrite,
+  runBackgroundInTransaction,
+  runInTransaction,
+  selectWithRetry,
+  type TinyNoteDatabase,
+} from './db';
 import type { Routine, RoutineInstance, RoutineInstanceRow, RoutineRow } from '../types/routine';
 import type { Task } from '../types/task';
 import { taskToParams } from './taskRepository';
@@ -13,8 +20,7 @@ const routineInstanceColumns = 'id, routine_id, task_id, instance_date, status, 
 
 export class RoutineRepository {
   async listRoutines(includeDeleted = false): Promise<Routine[]> {
-    const db = await getDb();
-    const rows = await db.select<RoutineRow[]>(
+    const rows = await selectWithRetry<RoutineRow[]>(
       `SELECT ${routineColumns}
        FROM routines
        ${includeDeleted ? '' : 'WHERE deleted_at IS NULL'}
@@ -24,8 +30,7 @@ export class RoutineRepository {
   }
 
   async listEnabledDailyRoutines(): Promise<Routine[]> {
-    const db = await getDb();
-    const rows = await db.select<RoutineRow[]>(
+    const rows = await selectWithRetry<RoutineRow[]>(
       `SELECT ${routineColumns}
        FROM routines
        WHERE routine_type = 'daily'
@@ -37,8 +42,7 @@ export class RoutineRepository {
   }
 
   async listInstances(): Promise<RoutineInstance[]> {
-    const db = await getDb();
-    const rows = await db.select<RoutineInstanceRow[]>(
+    const rows = await selectWithRetry<RoutineInstanceRow[]>(
       `SELECT ${routineInstanceColumns}
        FROM routine_instances
        ORDER BY instance_date DESC`,
@@ -47,13 +51,15 @@ export class RoutineRepository {
   }
 
   async insertRoutine(routine: Routine): Promise<void> {
-    const db = await getDb();
-    await insertRoutine(db, routine);
+    await executeWrite(
+      `INSERT INTO routines (${routineColumns})
+       VALUES (${placeholders(16)})`,
+      routineToParams(routine),
+    );
   }
 
   async saveRoutine(routine: Routine): Promise<void> {
-    const db = await getDb();
-    await db.execute(
+    await executeWrite(
       `UPDATE routines
        SET user_id = $2,
            title = $3,
@@ -74,33 +80,27 @@ export class RoutineRepository {
     );
   }
 
-  async createTasksWithInstances(tasks: Task[]): Promise<void> {
-    await runInTransaction(async (db) => {
-      for (const task of tasks) {
-        await db.execute(
-          `INSERT INTO tasks (
-            id, user_id, device_id, title, content, task_date, status, priority, source_type,
-            routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at,
-            created_at, updated_at, sync_status, version
-          )
-          VALUES (${placeholders(19)})`,
-          taskToParams(task),
-        );
+  async createTasksWithInstances(
+    tasks: Task[],
+    options: { priority?: 'foreground' | 'background' } = {},
+  ): Promise<Task[]> {
+    const run = options.priority === 'background' ? runBackgroundInTransaction : runInTransaction;
 
-        if (task.routineId) {
-          await db.execute(
-            `INSERT OR IGNORE INTO routine_instances (${routineInstanceColumns})
-             VALUES ($1, $2, $3, $4, 'generated', $5)`,
-            [`instance_${task.routineId}_${task.taskDate}`, task.routineId, task.id, task.taskDate, task.createdAt],
-          );
+    return run(async (db) => {
+      const insertedTasks: Task[] = [];
+
+      for (const task of tasks) {
+        if (await insertGeneratedTask(db, task)) {
+          insertedTasks.push(task);
         }
       }
+
+      return insertedTasks;
     });
   }
 
   async upsertRoutine(routine: Routine): Promise<void> {
-    const db = await getDb();
-    await db.execute(
+    await executeWrite(
       `INSERT INTO routines (${routineColumns})
        VALUES (${placeholders(16)})
        ON CONFLICT(id) DO UPDATE SET
@@ -124,8 +124,7 @@ export class RoutineRepository {
   }
 
   async upsertRoutineInstance(instance: RoutineInstance): Promise<void> {
-    const db = await getDb();
-    await db.execute(
+    await executeWrite(
       `INSERT INTO routine_instances (${routineInstanceColumns})
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT(routine_id, instance_date) DO UPDATE SET
@@ -221,14 +220,64 @@ export function routineInstanceToParams(instance: RoutineInstance): unknown[] {
   ];
 }
 
-async function insertRoutine(db: TinyNoteDatabase, routine: Routine): Promise<void> {
-  await db.execute(
-    `INSERT INTO routines (${routineColumns})
-     VALUES (${placeholders(16)})`,
-    routineToParams(routine),
-  );
-}
-
 function placeholders(count: number): string {
   return Array.from({ length: count }, (_, index) => `$${index + 1}`).join(', ');
+}
+
+async function insertGeneratedTask(db: TinyNoteDatabase, task: Task): Promise<boolean> {
+  const params = taskToParams(task);
+  const taskResult = task.routineId
+    ? await executeInTransaction(
+      db,
+      `INSERT INTO tasks (
+        id, user_id, device_id, title, content, task_date, status, priority, source_type,
+        routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at,
+        created_at, updated_at, sync_status, version
+      )
+      SELECT ${placeholders(19)}
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM routine_instances
+        WHERE routine_id = $20
+          AND instance_date = $21
+      )`,
+      [...params, task.routineId, task.taskDate],
+    )
+    : await executeInTransaction(
+      db,
+      `INSERT INTO tasks (
+        id, user_id, device_id, title, content, task_date, status, priority, source_type,
+        routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at,
+        created_at, updated_at, sync_status, version
+      )
+      VALUES (${placeholders(19)})`,
+      params,
+    );
+
+  if (getRowsAffected(taskResult) === 0) {
+    return false;
+  }
+
+  if (task.routineId) {
+    await executeInTransaction(
+      db,
+      `INSERT OR IGNORE INTO routine_instances (${routineInstanceColumns})
+       VALUES ($1, $2, $3, $4, 'generated', $5)`,
+      [`instance_${task.routineId}_${task.taskDate}`, task.routineId, task.id, task.taskDate, task.createdAt],
+    );
+  }
+
+  return true;
+}
+
+function getRowsAffected(result: unknown): number {
+  if (typeof result === 'number') {
+    return result;
+  }
+
+  if (typeof result === 'object' && result !== null && 'rowsAffected' in result) {
+    return Number((result as { rowsAffected: unknown }).rowsAffected);
+  }
+
+  return 0;
 }

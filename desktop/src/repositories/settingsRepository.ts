@@ -1,10 +1,9 @@
 import { defaultSettings, type AppSettings, type AppSettingKey, type SettingRow } from '../types/settings';
-import { getDb, parseSettingValue } from './db';
+import { executeWrite, parseSettingValue, selectWithRetry } from './db';
 
 export class SettingsRepository {
   async load(): Promise<AppSettings> {
-    const db = await getDb();
-    const rows = await db.select<SettingRow[]>('SELECT key, value, updated_at FROM app_settings');
+    const rows = await selectWithRetry<SettingRow[]>('SELECT key, value, updated_at FROM app_settings');
     const settings = { ...defaultSettings };
 
     for (const row of rows) {
@@ -18,8 +17,7 @@ export class SettingsRepository {
   }
 
   async set<K extends AppSettingKey>(key: K, value: AppSettings[K]): Promise<void> {
-    const db = await getDb();
-    await db.execute(
+    await executeWrite(
       `INSERT INTO app_settings (key, value, updated_at)
        VALUES ($1, $2, $3)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
@@ -28,10 +26,8 @@ export class SettingsRepository {
   }
 
   async setMany(settings: Partial<AppSettings>): Promise<void> {
-    await Promise.all(
-      Object.entries(settings).map(([key, value]) =>
-        this.set(key as AppSettingKey, value as never),
-      ),
-    );
+    for (const [key, value] of Object.entries(settings)) {
+      await this.set(key as AppSettingKey, value as never);
+    }
   }
 }

@@ -15,9 +15,14 @@ export function TaskInput({ selectedDate, onSubmit }: TaskInputProps) {
     const value = title.trim();
     if (!value) return;
     setIsSaving(true);
-    await onSubmit(value);
-    setTitle('');
-    setIsSaving(false);
+    try {
+      await onSubmit(value);
+      setTitle('');
+    } catch (error) {
+      console.error('Failed to add task', error);
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (

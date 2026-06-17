@@ -90,13 +90,11 @@ fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
 }
 
 fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "create_tinynote_mvp_schema",
-        sql: r#"
-            PRAGMA journal_mode=WAL;
-            PRAGMA busy_timeout=5000;
-
+    vec![
+        Migration {
+            version: 1,
+            description: "create_tinynote_mvp_schema",
+            sql: r#"
             CREATE TABLE IF NOT EXISTS tasks (
               id TEXT PRIMARY KEY,
               user_id TEXT,
@@ -170,6 +168,15 @@ fn migrations() -> Vec<Migration> {
             CREATE INDEX IF NOT EXISTS idx_routines_is_enabled ON routines(is_enabled);
             CREATE INDEX IF NOT EXISTS idx_sync_log_synced_at ON sync_log(synced_at);
         "#,
-        kind: MigrationKind::Up,
-    }]
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "enable_wal_journal_mode",
+            sql: r#"
+            PRAGMA journal_mode=WAL;
+        "#,
+            kind: MigrationKind::Up,
+        },
+    ]
 }

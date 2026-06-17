@@ -1,4 +1,10 @@
-import { getDb, runInTransaction, type TinyNoteDatabase } from './db';
+import {
+  executeInTransaction,
+  executeWrite,
+  runInTransaction,
+  selectWithRetry,
+  type TinyNoteDatabase,
+} from './db';
 import type { Task, TaskRow } from '../types/task';
 
 const taskColumns = `
@@ -9,8 +15,7 @@ const taskColumns = `
 
 export class TaskRepository {
   async listByDateRange(startDate: string, endDate: string): Promise<Task[]> {
-    const db = await getDb();
-    const rows = await db.select<TaskRow[]>(
+    const rows = await selectWithRetry<TaskRow[]>(
       `SELECT ${taskColumns}
        FROM tasks
        WHERE task_date BETWEEN $1 AND $2
@@ -22,8 +27,7 @@ export class TaskRepository {
   }
 
   async listArchive(): Promise<Task[]> {
-    const db = await getDb();
-    const rows = await db.select<TaskRow[]>(
+    const rows = await selectWithRetry<TaskRow[]>(
       `SELECT ${taskColumns}
        FROM tasks
        WHERE status IN ('completed', 'archived')
@@ -33,8 +37,7 @@ export class TaskRepository {
   }
 
   async listAll(): Promise<Task[]> {
-    const db = await getDb();
-    const rows = await db.select<TaskRow[]>(
+    const rows = await selectWithRetry<TaskRow[]>(
       `SELECT ${taskColumns}
        FROM tasks
        ORDER BY updated_at DESC`,
@@ -43,8 +46,7 @@ export class TaskRepository {
   }
 
   async findById(id: string): Promise<Task | null> {
-    const db = await getDb();
-    const rows = await db.select<TaskRow[]>(
+    const rows = await selectWithRetry<TaskRow[]>(
       `SELECT ${taskColumns}
        FROM tasks
        WHERE id = $1
@@ -55,8 +57,11 @@ export class TaskRepository {
   }
 
   async insert(task: Task): Promise<void> {
-    const db = await getDb();
-    await insertTask(db, task);
+    await executeWrite(
+      `INSERT INTO tasks (${taskColumns})
+       VALUES (${placeholders(19)})`,
+      taskToParams(task),
+    );
   }
 
   async insertMany(tasks: Task[]): Promise<void> {
@@ -68,8 +73,7 @@ export class TaskRepository {
   }
 
   async save(task: Task): Promise<void> {
-    const db = await getDb();
-    await db.execute(
+    await executeWrite(
       `UPDATE tasks
        SET user_id = $2,
            device_id = $3,
@@ -94,8 +98,7 @@ export class TaskRepository {
   }
 
   async upsert(task: Task): Promise<void> {
-    const db = await getDb();
-    await db.execute(
+    await executeWrite(
       `INSERT INTO tasks (${taskColumns})
        VALUES (${placeholders(19)})
        ON CONFLICT(id) DO UPDATE SET
@@ -194,7 +197,8 @@ export function taskToUpdateParams(task: Task): unknown[] {
 }
 
 async function insertTask(db: TinyNoteDatabase, task: Task): Promise<void> {
-  await db.execute(
+  await executeInTransaction(
+    db,
     `INSERT INTO tasks (${taskColumns})
      VALUES (${placeholders(19)})`,
     taskToParams(task),
