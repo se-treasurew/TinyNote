@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
 import { ArchivePanel } from '../components/ArchivePanel';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { TaskManagePanel } from '../components/TaskManagePanel';
-import { TaskInput, type TaskInputValue } from '../components/TaskInput';
 import { TaskItem } from '../components/TaskItem';
 import { TitleBar } from '../components/TitleBar';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -13,6 +12,7 @@ import { useUiStore } from '../stores/uiStore';
 
 export function MainPage() {
   const [isAdding, setIsAdding] = useState(false);
+  const [quickTitle, setQuickTitle] = useState('');
   const settings = useSettingsStore((state) => state.settings);
   const tasks = useTaskStore((state) => state.tasks);
   const tasksByDate = useTaskStore((state) => state.tasksByDate);
@@ -22,7 +22,6 @@ export function MainPage() {
   const navigateDate = useTaskStore((state) => state.navigateDate);
   const goToToday = useTaskStore((state) => state.goToToday);
   const addTask = useTaskStore((state) => state.addTask);
-  const updateTaskProgress = useTaskStore((state) => state.updateTaskProgress);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const loadTasks = useTaskStore((state) => state.loadTasks);
   const isArchiveOpen = useUiStore((state) => state.isArchiveOpen);
@@ -41,25 +40,42 @@ export function MainPage() {
     }, {});
   }, [tasks]);
 
+  const dateStripRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     void loadTasks(settings.visibleDays, undefined, undefined, settings.carryProgressForward);
   }, [loadTasks, settings.visibleDays, settings.carryProgressForward]);
+
+  // Auto-scroll the selected date tab into view
+  useEffect(() => {
+    const container = dateStripRef.current;
+    if (!container) return;
+    const tab = container.querySelector<HTMLElement>(`[data-date="${selectedDate}"]`);
+    if (tab && typeof tab.scrollIntoView === 'function') {
+      tab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [selectedDate]);
 
   async function selectAdjacentDate(direction: -1 | 1) {
     await navigateDate(direction, settings.visibleDays, settings.carryProgressForward);
     setIsAdding(false);
   }
 
-  async function submitTask(value: TaskInputValue) {
-    const task = await addTask({
-      title: value.title,
-      taskDate: value.taskDate || useTaskStore.getState().selectedDate,
-      sourceType: value.sourceType,
-      endDate: value.endDate,
+  async function submitQuickTask() {
+    const title = quickTitle.trim();
+    if (!title) return;
+    await addTask({
+      title,
+      taskDate: selectedDate,
+      sourceType: 'manual',
+      endDate: null,
     });
-    if (value.progressPercent > 0) {
-      await updateTaskProgress(task.id, value.taskDate || useTaskStore.getState().selectedDate, value.progressPercent);
-    }
+    setQuickTitle('');
+    setIsAdding(false);
+  }
+
+  function cancelAdding() {
+    setQuickTitle('');
     setIsAdding(false);
   }
 
@@ -82,12 +98,13 @@ export function MainPage() {
         >
           <ChevronLeft size={18} />
         </button>
-        <div className="date-strip" role="tablist" aria-label="日期">
+        <div className="date-strip" ref={dateStripRef} role="tablist" aria-label="日期">
           {visibleDates.map((date) => (
             <button
               key={date}
               type="button"
               role="tab"
+              data-date={date}
               className={`date-tab ${selectedDate === date ? 'selected' : ''}`}
               aria-label={`${formatWeekdayLabel(date)} ${formatMonthDay(date)}`}
               aria-selected={selectedDate === date}
@@ -144,8 +161,22 @@ export function MainPage() {
       <section className={`bottom-bar ${isAdding ? 'editing' : ''}`}>
         {isAdding ? (
           <>
-            <TaskInput selectedDate={selectedDate} onSubmit={(value) => void submitTask(value)} />
-            <button type="button" className="bottom-action cancel" aria-label="取消" onClick={() => setIsAdding(false)}>
+            <input
+              className="quick-add-input"
+              autoFocus
+              aria-label="快速添加任务"
+              value={quickTitle}
+              onChange={(event) => setQuickTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void submitQuickTask();
+                if (event.key === 'Escape') cancelAdding();
+              }}
+              placeholder={`${selectedDate} 添加一件小事`}
+            />
+            <button type="button" className="bottom-action confirm" aria-label="确认添加" onClick={() => void submitQuickTask()}>
+              <Plus size={18} />
+            </button>
+            <button type="button" className="bottom-action cancel" aria-label="取消" onClick={cancelAdding}>
               <X size={18} />
             </button>
           </>

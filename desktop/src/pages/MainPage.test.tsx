@@ -122,14 +122,13 @@ describe('MainPage display layout', () => {
 
   it('submits new tasks with the latest selected date from the store', async () => {
     const addTask = vi.fn(async () => baseTask({ id: 'task-new', taskDate: '2026-06-17' }));
-    const updateTaskProgress = vi.fn(async () => undefined);
-    useTaskStore.setState({ addTask, updateTaskProgress, selectedDate: '2026-06-17' });
+    useTaskStore.setState({ addTask, selectedDate: '2026-06-17' });
 
     render(<MainPage />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加' }));
-    fireEvent.change(screen.getByLabelText('添加任务'), { target: { value: '快速翻页后新增' } });
-    fireEvent.submit(screen.getByLabelText('添加任务').closest('form') as HTMLFormElement);
+    fireEvent.change(screen.getByLabelText('快速添加任务'), { target: { value: '快速翻页后新增' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认添加' }));
 
     await waitFor(() => {
       expect(addTask).toHaveBeenCalledWith({
@@ -141,28 +140,23 @@ describe('MainPage display layout', () => {
     });
   });
 
-  it('submits multi-day tasks with progress from the expanded input', async () => {
+  it('submits a quick task on Enter key press', async () => {
     const addTask = vi.fn(async () => baseTask({ id: 'task-1' }));
-    const updateTaskProgress = vi.fn(async () => undefined);
-    useTaskStore.setState({ addTask, updateTaskProgress });
+    useTaskStore.setState({ addTask });
 
     render(<MainPage />);
 
     fireEvent.click(screen.getByRole('button', { name: '添加' }));
-    fireEvent.change(screen.getByLabelText('添加任务'), { target: { value: '准备论文' } });
-    fireEvent.change(screen.getByLabelText('任务类型'), { target: { value: 'multi_day' } });
-    fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2026-06-20' } });
-    fireEvent.change(screen.getByLabelText('初始进度'), { target: { value: '30' } });
-    fireEvent.submit(screen.getByLabelText('添加任务').closest('form') as HTMLFormElement);
+    fireEvent.change(screen.getByLabelText('快速添加任务'), { target: { value: '快捷键任务' } });
+    fireEvent.keyDown(screen.getByLabelText('快速添加任务'), { key: 'Enter' });
 
     await waitFor(() => {
       expect(addTask).toHaveBeenCalledWith({
-        title: '准备论文',
+        title: '快捷键任务',
         taskDate: '2026-06-16',
-        sourceType: 'multi_day',
-        endDate: '2026-06-20',
+        sourceType: 'manual',
+        endDate: null,
       });
-      expect(updateTaskProgress).toHaveBeenCalledWith('task-1', '2026-06-16', 30);
     });
   });
 });

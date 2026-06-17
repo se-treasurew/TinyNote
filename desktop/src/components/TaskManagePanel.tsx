@@ -1,12 +1,14 @@
-import { Pencil, Trash2, X } from 'lucide-react';
+import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { useTaskStore } from '../stores/taskStore';
 import { taskService } from '../services/taskService';
 import type { Task, TaskSourceType } from '../types/task';
+import { todayIsoDate } from '../utils/date';
 
 export function TaskManagePanel() {
   const closePanel = useUiStore((state) => state.closePanel);
+  const addTask = useTaskStore((state) => state.addTask);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const updateTask = useTaskStore((state) => state.updateTask);
   const loadTasks = useTaskStore((state) => state.loadTasks);
@@ -16,6 +18,10 @@ export function TaskManagePanel() {
   const [editTitle, setEditTitle] = useState('');
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newStartDate, setNewStartDate] = useState(todayIsoDate());
+  const [newEndDate, setNewEndDate] = useState('');
 
   async function refresh() {
     const all = await taskService.loadAll();
@@ -58,6 +64,30 @@ export function TaskManagePanel() {
     await refresh();
   }
 
+  async function handleCreate() {
+    const title = newTitle.trim();
+    if (!title) return;
+    await addTask({
+      title,
+      taskDate: newStartDate,
+      sourceType: mode,
+      endDate: newEndDate || null,
+    });
+    setNewTitle('');
+    setNewStartDate(todayIsoDate());
+    setNewEndDate('');
+    setIsAdding(false);
+    await refresh();
+    await loadTasks();
+  }
+
+  function cancelAdd() {
+    setNewTitle('');
+    setNewStartDate(todayIsoDate());
+    setNewEndDate('');
+    setIsAdding(false);
+  }
+
   return (
     <aside className="panel">
       <header className="panel-header">
@@ -70,18 +100,45 @@ export function TaskManagePanel() {
         <button
           type="button"
           className={mode === 'daily' ? 'active' : ''}
-          onClick={() => { setMode('daily'); setEditingId(null); }}
+          onClick={() => { setMode('daily'); setEditingId(null); cancelAdd(); }}
         >
           每日
         </button>
         <button
           type="button"
           className={mode === 'multi_day' ? 'active' : ''}
-          onClick={() => { setMode('multi_day'); setEditingId(null); }}
+          onClick={() => { setMode('multi_day'); setEditingId(null); cancelAdd(); }}
         >
           多日
         </button>
       </div>
+      {isAdding ? (
+        <div className="panel-form">
+          <input
+            autoFocus
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void handleCreate();
+              if (e.key === 'Escape') cancelAdd();
+            }}
+            placeholder={mode === 'daily' ? '新建每日任务' : '新建多日任务'}
+          />
+          <div className="date-pair">
+            <input type="date" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} />
+            <input type="date" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} />
+          </div>
+          <div className="panel-form-actions">
+            <button type="button" onClick={() => void handleCreate()}>创建</button>
+            <button type="button" className="ghost" onClick={cancelAdd}>取消</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="ghost-row-button" onClick={() => setIsAdding(true)}>
+          <Plus size={15} />
+          <span>新建{mode === 'daily' ? '每日' : '多日'}任务</span>
+        </button>
+      )}
       <div className="panel-list">
         {filtered.map((task) => (
           <div className="routine-row" key={task.id}>
