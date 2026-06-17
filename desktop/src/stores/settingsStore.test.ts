@@ -74,4 +74,16 @@ describe('settings store persistence behavior', () => {
 
     expect(useSettingsStore.getState().settings.opacity).toBe(0.8);
   });
+
+  it('reloads settings from storage when the newest save fails', async () => {
+    mocks.updateSetting.mockRejectedValueOnce(new Error('save failed'));
+    mocks.loadSettings.mockResolvedValueOnce({ ...defaultSettings, opacity: 0.7 });
+
+    const update = useSettingsStore.getState().updateSetting('opacity', 0.9);
+
+    expect(useSettingsStore.getState().settings.opacity).toBe(0.9);
+    await expect(update).rejects.toThrow('save failed');
+    expect(mocks.loadSettings).toHaveBeenCalledTimes(1);
+    expect(useSettingsStore.getState().settings.opacity).toBe(0.7);
+  });
 });

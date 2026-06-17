@@ -59,10 +59,6 @@ function scheduleNavigationLoad(load: () => Promise<void>) {
   }, NAVIGATION_LOAD_DELAY_MS);
 }
 
-function abortLoad() {
-  set({ isLoading: false });
-}
-
 export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
   archiveTasks: [],
@@ -86,20 +82,17 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     try {
       let tasks = await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
       if (loadId !== latestTaskLoadId) {
-        abortLoad();
         return;
       }
 
       const generated = await routineService.generateVisibleRoutineTasks(dateWindow.visibleDates, tasks);
       if (loadId !== latestTaskLoadId) {
-        abortLoad();
         return;
       }
 
       if (generated.length > 0) {
         tasks = await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
         if (loadId !== latestTaskLoadId) {
-          abortLoad();
           return;
         }
       }
@@ -131,12 +124,10 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       visibleDays,
     });
     const dateWindow = buildDateWindow(visibleDays, next.visibleStartDate, next.selectedDate);
+    latestTaskLoadId += 1;
+    set({ ...dateWindow, isLoading: false });
     scheduleNavigationLoad(async () => {
-      try {
-        await get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate);
-      } catch {
-        abortLoad();
-      }
+      await get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate);
     });
   },
 

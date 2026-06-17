@@ -159,6 +159,34 @@ describe('task store date window behavior', () => {
     expect(useTaskStore.getState().tasksByDate['2026-06-19']).toEqual([newerTask]);
   });
 
+  it('does not leave loading stuck when navigation invalidates an in-flight load', async () => {
+    vi.useFakeTimers();
+    useTaskStore.setState({
+      visibleDates: ['2026-06-16', '2026-06-17'],
+      visibleStartDate: '2026-06-16',
+      visibleDays: 2,
+      selectedDate: '2026-06-17',
+      isLoading: false,
+    });
+    const staleLoad = deferred<Task[]>();
+    mocks.loadVisibleTasks.mockImplementationOnce(() => staleLoad.promise);
+
+    const staleRefresh = useTaskStore.getState().loadTasks(2, '2026-06-16', '2026-06-17');
+    expect(useTaskStore.getState().isLoading).toBe(true);
+
+    await useTaskStore.getState().navigateDate(1, 2);
+    expect(useTaskStore.getState().selectedDate).toBe('2026-06-18');
+    expect(useTaskStore.getState().visibleDates).toContain('2026-06-18');
+    expect(useTaskStore.getState().isLoading).toBe(false);
+
+    staleLoad.resolve([]);
+    await staleRefresh;
+    expect(useTaskStore.getState().isLoading).toBe(false);
+
+    await vi.runOnlyPendingTimersAsync();
+    expect(useTaskStore.getState().isLoading).toBe(false);
+  });
+
   it('adds tasks to the date reached by rapid navigation', async () => {
     vi.useFakeTimers();
     useTaskStore.setState({
