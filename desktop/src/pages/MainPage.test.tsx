@@ -99,23 +99,35 @@ describe('MainPage display layout', () => {
   });
 
   it('loads the next date window when the next arrow reaches the visible edge', async () => {
-    const loadTasks = vi.fn(async () => undefined);
-    const setSelectedDate = vi.fn();
+    const navigateDate = vi.fn(async () => undefined);
 
     useTaskStore.setState({
       selectedDate: '2026-06-17',
-      loadTasks,
-      setSelectedDate,
+      navigateDate,
     });
 
     render(<MainPage />);
-    loadTasks.mockClear();
 
     fireEvent.click(screen.getByRole('button', { name: '下一个日期' }));
 
     await waitFor(() => {
-      expect(loadTasks).toHaveBeenCalledWith(7, '2026-06-17');
-      expect(setSelectedDate).toHaveBeenCalledWith('2026-06-18');
+      expect(navigateDate).toHaveBeenCalledWith(1, 7);
+    });
+  });
+
+  it('submits new tasks with the latest selected date from the store', async () => {
+    const addTask = vi.fn(async () => undefined);
+    useTaskStore.setState({ addTask });
+
+    render(<MainPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '添加' }));
+    useTaskStore.getState().selectedDate = '2026-06-17';
+    fireEvent.change(screen.getByLabelText('添加任务'), { target: { value: '快速翻页后新增' } });
+    fireEvent.submit(screen.getByLabelText('添加任务').closest('form') as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(addTask).toHaveBeenCalledWith({ title: '快速翻页后新增', taskDate: '2026-06-17' });
     });
   });
 });

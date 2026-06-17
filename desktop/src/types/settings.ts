@@ -18,6 +18,7 @@ export interface AppSettings {
   opacity: number;
   theme: ThemeMode;
   fontSize: number;
+  backgroundImageDataUrl: string | null;
 }
 
 export type AppSettingKey = keyof AppSettings;
@@ -39,4 +40,5 @@ export const defaultSettings: AppSettings = {
   opacity: 0.82,
   theme: 'glass-blue',
   fontSize: 13,
+  backgroundImageDataUrl: null,
 };

@@ -18,7 +18,7 @@ export function TitleBar() {
     >
       <div className="title-copy">
         <strong>小笺</strong>
-        <span>v0.1.2</span>
+        <span>v0.1.5</span>
       </div>
       <nav className="title-actions" onMouseDown={(event) => event.stopPropagation()}>
         <button type="button" title="Routine" aria-label="Routine" onClick={() => openPanel('routine')}>

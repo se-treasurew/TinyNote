@@ -1,5 +1,5 @@
-import { Download, RotateCcw, Upload, X } from 'lucide-react';
-import { ChangeEvent } from 'react';
+import { Download, Image, RotateCcw, Trash2, Upload, X } from 'lucide-react';
+import { ChangeEvent, useState } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
 import { useRoutineStore } from '../stores/routineStore';
@@ -8,7 +8,11 @@ import { dataPortabilityService } from '../services/dataPortabilityService';
 import type { TinyNoteExport } from '../services/syncService';
 import type { ThemeMode } from '../types/settings';
 
+const ALLOWED_BACKGROUND_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const MAX_BACKGROUND_IMAGE_BYTES = 3 * 1024 * 1024;
+
 export function SettingsPanel() {
+  const [backgroundError, setBackgroundError] = useState<string | null>(null);
   const settings = useSettingsStore((state) => state.settings);
   const updateSetting = useSettingsStore((state) => state.updateSetting);
   const resetWindow = useSettingsStore((state) => state.resetWindow);
@@ -36,6 +40,31 @@ export function SettingsPanel() {
     await loadSettings();
     await loadRoutines();
     await loadTasks();
+  }
+
+  async function importBackgroundImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!ALLOWED_BACKGROUND_IMAGE_TYPES.has(file.type)) {
+      setBackgroundError('请选择 PNG、JPG 或 WebP 图片');
+      return;
+    }
+
+    if (file.size > MAX_BACKGROUND_IMAGE_BYTES) {
+      setBackgroundError('背景图片不能超过 3 MB');
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    setBackgroundError(null);
+    await updateSetting('backgroundImageDataUrl', dataUrl);
+  }
+
+  async function clearBackgroundImage() {
+    setBackgroundError(null);
+    await updateSetting('backgroundImageDataUrl', null);
   }
 
   return (
@@ -135,6 +164,25 @@ export function SettingsPanel() {
             onChange={(event) => void updateSetting('fontSize', Number(event.target.value))}
           />
         </label>
+        <div className="settings-row background-row">
+          <span>背景图片</span>
+          <div className="background-controls">
+            <label className="icon-upload background-upload" title="选择背景图片">
+              <Image size={15} />
+              <input
+                aria-label="背景图片"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => void importBackgroundImage(event)}
+              />
+            </label>
+            <button type="button" aria-label="清除背景图片" onClick={() => void clearBackgroundImage()}>
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </div>
+        {settings.backgroundImageDataUrl && <p className="settings-note">已设置背景图片</p>}
+        {backgroundError && <p className="settings-error">{backgroundError}</p>}
       </div>
       <div className="panel-toolbar">
         <button type="button" aria-label="恢复窗口" onClick={() => void resetWindow()}>
@@ -150,4 +198,13 @@ export function SettingsPanel() {
       </div>
     </aside>
   );
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(String(reader.result)));
+    reader.addEventListener('error', () => reject(reader.error ?? new Error('Failed to read file')));
+    reader.readAsDataURL(file);
+  });
 }

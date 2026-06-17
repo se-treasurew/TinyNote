@@ -9,7 +9,6 @@ import { TitleBar } from '../components/TitleBar';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
 import { useUiStore } from '../stores/uiStore';
-import { addDays } from '../utils/date';
 
 export function MainPage() {
   const [isAdding, setIsAdding] = useState(false);
@@ -17,9 +16,9 @@ export function MainPage() {
   const tasks = useTaskStore((state) => state.tasks);
   const tasksByDate = useTaskStore((state) => state.tasksByDate);
   const visibleDates = useTaskStore((state) => state.visibleDates);
-  const visibleStartDate = useTaskStore((state) => state.visibleStartDate);
   const selectedDate = useTaskStore((state) => state.selectedDate);
   const setSelectedDate = useTaskStore((state) => state.setSelectedDate);
+  const navigateDate = useTaskStore((state) => state.navigateDate);
   const addTask = useTaskStore((state) => state.addTask);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const loadTasks = useTaskStore((state) => state.loadTasks);
@@ -44,31 +43,12 @@ export function MainPage() {
   }, [loadTasks, settings.visibleDays]);
 
   async function selectAdjacentDate(direction: -1 | 1) {
-    if (visibleDates.length === 0) return;
-
-    const nextDate = addDays(selectedDate, direction);
-    const firstVisibleDate = visibleDates[0];
-    const lastVisibleDate = visibleDates[visibleDates.length - 1];
-    let nextStartDate = visibleStartDate || firstVisibleDate;
-
-    if (nextDate < firstVisibleDate) {
-      nextStartDate = addDays(nextStartDate, -1);
-    }
-
-    if (nextDate > lastVisibleDate) {
-      nextStartDate = addDays(nextStartDate, 1);
-    }
-
-    if (nextStartDate !== visibleStartDate) {
-      await loadTasks(settings.visibleDays, nextStartDate);
-    }
-
-    setSelectedDate(nextDate);
+    await navigateDate(direction, settings.visibleDays);
     setIsAdding(false);
   }
 
   async function submitTask(title: string) {
-    await addTask({ title, taskDate: selectedDate });
+    await addTask({ title, taskDate: useTaskStore.getState().selectedDate });
     setIsAdding(false);
   }
 

@@ -14,6 +14,8 @@ interface SettingsState {
   resetWindow: () => Promise<void>;
 }
 
+let latestSettingsUpdateId = 0;
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: defaultSettings,
   isLoading: false,
@@ -29,8 +31,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   async updateSetting(key, value) {
-    const settings = await settingsService.updateSetting(key, value);
-    set({ settings });
+    const previousSettings = get().settings;
+    const updateId = ++latestSettingsUpdateId;
+    set({ settings: { ...previousSettings, [key]: value } });
+
+    try {
+      const settings = await settingsService.updateSetting(key, value);
+      if (updateId === latestSettingsUpdateId) {
+        set({ settings });
+      }
+    } catch (error) {
+      if (updateId === latestSettingsUpdateId) {
+        set({ settings: previousSettings });
+      }
+      throw error;
+    }
   },
 
   async toggleTopmost() {

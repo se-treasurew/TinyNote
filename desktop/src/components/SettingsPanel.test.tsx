@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsPanel } from './SettingsPanel';
-import { defaultSettings } from '../types/settings';
+import { defaultSettings, type AppSettings } from '../types/settings';
 import { useRoutineStore } from '../stores/routineStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
@@ -15,13 +15,18 @@ vi.mock('../services/dataPortabilityService', () => ({
 }));
 
 describe('SettingsPanel theme choices', () => {
+  const updateSetting = vi.fn(async () => undefined);
+
   beforeEach(() => {
+    vi.clearAllMocks();
+    const settings: AppSettings = { ...defaultSettings, theme: 'glass-blue', backgroundImageDataUrl: null };
+
     useSettingsStore.setState({
-      settings: { ...defaultSettings, theme: 'glass-blue' },
+      settings,
       isLoading: false,
-      updateSetting: vi.fn(async () => undefined),
+      updateSetting,
       resetWindow: vi.fn(async () => undefined),
-      loadSettings: vi.fn(async () => ({ ...defaultSettings, theme: 'glass-blue' })),
+      loadSettings: vi.fn(async () => settings),
     });
     useTaskStore.setState({
       loadTasks: vi.fn(async () => undefined),
@@ -41,5 +46,44 @@ describe('SettingsPanel theme choices', () => {
     const options = within(themeSelect).getAllByRole('option').map((option) => option.textContent);
 
     expect(options).toEqual(expect.arrayContaining(['玻璃蓝', '玻璃白', '薄荷玻璃', '暮紫玻璃']));
+  });
+
+  it('stores a valid custom background image as a data URL', async () => {
+    render(<SettingsPanel />);
+
+    const file = new File(['tiny-image'], 'background.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('背景图片'), { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(updateSetting).toHaveBeenCalledWith(
+        'backgroundImageDataUrl',
+        expect.stringMatching(/^data:image\/png;base64,/),
+      );
+    });
+  });
+
+  it('rejects unsupported or oversized background images without changing settings', async () => {
+    render(<SettingsPanel />);
+
+    fireEvent.change(screen.getByLabelText('背景图片'), {
+      target: { files: [new File(['text'], 'note.txt', { type: 'text/plain' })] },
+    });
+
+    expect(await screen.findByText('请选择 PNG、JPG 或 WebP 图片')).toBeInTheDocument();
+    expect(updateSetting).not.toHaveBeenCalledWith('backgroundImageDataUrl', expect.any(String));
+
+    const largeFile = new File([new Uint8Array(3 * 1024 * 1024 + 1)], 'large.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('背景图片'), { target: { files: [largeFile] } });
+
+    expect(await screen.findByText('背景图片不能超过 3 MB')).toBeInTheDocument();
+    expect(updateSetting).not.toHaveBeenCalledWith('backgroundImageDataUrl', expect.any(String));
+  });
+
+  it('clears the custom background image', () => {
+    render(<SettingsPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: '清除背景图片' }));
+
+    expect(updateSetting).toHaveBeenCalledWith('backgroundImageDataUrl', null);
   });
 });

@@ -11,6 +11,10 @@ export const windowService = {
     ]);
     document.documentElement.style.setProperty('--window-opacity', String(settings.opacity));
     document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
+    document.documentElement.style.setProperty(
+      '--custom-background-image',
+      settings.backgroundImageDataUrl ? `url("${settings.backgroundImageDataUrl}")` : 'none',
+    );
     document.documentElement.dataset.theme = settings.theme;
   },
 

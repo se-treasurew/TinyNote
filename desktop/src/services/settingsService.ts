@@ -38,7 +38,8 @@ export class SettingsService {
       key === 'alwaysOnTop' ||
       key === 'opacity' ||
       key === 'theme' ||
-      key === 'fontSize'
+      key === 'fontSize' ||
+      key === 'backgroundImageDataUrl'
     ) {
       const settings = await settingsRepository.load();
       await windowService.applySettings(settings);
