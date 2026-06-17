@@ -87,22 +87,26 @@ export function TaskItem({ task }: TaskItemProps) {
             {task.title}
           </button>
         )}
-        <div className="task-tags">
-          {task.sourceType === 'daily' && <span>每日</span>}
-          {task.sourceType === 'multi_day' && <span>多日</span>}
-          {task.status === 'archived' && <span>归档</span>}
-          {task.taskDate < new Date().toISOString().slice(0, 10) && <span>过期</span>}
-        </div>
-        <div className="task-progress">
-          <input
-            aria-label={`任务进度：${task.title}`}
-            type="range"
-            min="0"
-            max="100"
-            value={progress}
-            onChange={(event) => void saveProgress(Number(event.target.value))}
-          />
-          <span>{progress}%</span>
+        <div className="task-meta">
+          <div className="task-tags">
+            {task.sourceType === 'daily' && <span>每日</span>}
+            {task.sourceType === 'multi_day' && <span>多日</span>}
+            {task.status === 'archived' && <span>归档</span>}
+            {task.taskDate < new Date().toISOString().slice(0, 10) && <span>过期</span>}
+          </div>
+          {task.status === 'active' && (
+            <div className="task-progress">
+              <input
+                aria-label={`任务进度：${task.title}`}
+                type="range"
+                min="0"
+                max="100"
+                value={progress}
+                onChange={(event) => void saveProgress(Number(event.target.value))}
+              />
+              <span>{progress}%</span>
+            </div>
+          )}
         </div>
       </div>
       <details className="task-menu">

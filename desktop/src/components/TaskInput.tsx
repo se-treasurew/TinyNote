@@ -51,14 +51,18 @@ export function TaskInput({ selectedDate, onSubmit }: TaskInputProps) {
 
   return (
     <form className="task-input" onSubmit={(event) => void handleSubmit(event)}>
-      <input
-        aria-label="添加任务"
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder={`${taskDate || selectedDate} 添加一件小事`}
-      />
-      <label className="task-input-field compact">
-        <span>类型</span>
+      <div className="task-input-row">
+        <input
+          aria-label="添加任务"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder={`${taskDate || selectedDate} 添加一件小事`}
+        />
+        <button type="submit" aria-label="添加" disabled={isSaving || !title.trim()}>
+          <Plus size={17} />
+        </button>
+      </div>
+      <div className="task-input-options">
         <select
           aria-label="任务类型"
           value={sourceType}
@@ -74,31 +78,21 @@ export function TaskInput({ selectedDate, onSubmit }: TaskInputProps) {
           <option value="daily">每日</option>
           <option value="multi_day">多日</option>
         </select>
-      </label>
-      <label className="task-input-field date">
-        <span>开始</span>
         <input aria-label="开始日期" type="date" value={taskDate} onChange={(event) => setTaskDate(event.target.value)} />
-      </label>
-      {sourceType !== 'manual' && (
-        <label className="task-input-field date">
-          <span>结束</span>
+        {sourceType !== 'manual' && (
           <input aria-label="结束日期" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-        </label>
-      )}
-      <label className="task-input-field progress">
-        <span>进度</span>
+        )}
         <input
           aria-label="初始进度"
           type="number"
+          className="progress-input"
           min="0"
           max="100"
+          placeholder="%"
           value={progressPercent}
           onChange={(event) => setProgressPercent(clampProgress(Number(event.target.value)))}
         />
-      </label>
-      <button type="submit" aria-label="添加" disabled={isSaving || !title.trim()}>
-        <Plus size={17} />
-      </button>
+      </div>
     </form>
   );
 }

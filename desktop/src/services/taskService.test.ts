@@ -36,6 +36,11 @@ vi.mock('./syncLogService', () => ({
   writeSyncLog: mocks.writeSyncLog,
 }));
 
+vi.mock('../utils/date', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/date')>();
+  return { ...actual, todayIsoDate: () => '2026-06-18' };
+});
+
 const { taskService } = await import('./taskService');
 
 const baseTask = (overrides: Partial<Task> = {}): Task => ({

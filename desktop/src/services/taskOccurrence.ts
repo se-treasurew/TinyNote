@@ -1,4 +1,5 @@
 import type { Task, TaskOccurrence, TaskProgressEntry, TaskStatus } from '../types/task';
+import { todayIsoDate } from '../utils/date';
 
 interface BuildTaskOccurrencesInput {
   tasks: Task[];
@@ -30,7 +31,7 @@ export function clampProgressPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function shouldShowTaskOnDate(task: Task, date: string, carryProgressForward: boolean): boolean {
+function shouldShowTaskOnDate(task: Task, date: string, _carryProgressForward: boolean): boolean {
   if (task.sourceType === 'daily') {
     return date >= task.taskDate && (!task.endDate || date <= task.endDate);
   }
@@ -39,10 +40,7 @@ function shouldShowTaskOnDate(task: Task, date: string, carryProgressForward: bo
     return date >= task.taskDate && (!task.endDate || date <= task.endDate);
   }
 
-  if (carryProgressForward && task.status === 'active') {
-    return date >= task.taskDate;
-  }
-
+  // manual: only shows on its own date, never carries forward
   return date === task.taskDate;
 }
 
@@ -55,7 +53,7 @@ function buildOccurrence(
   const directEntry = entries.find((entry) => entry.progressDate === date);
   const inheritedEntry =
     directEntry ??
-    (shouldCarryProgress(task, carryProgressForward)
+    (shouldCarryProgress(task, carryProgressForward, date)
       ? entries
           .filter((entry) => entry.progressDate <= date)
           .sort((a, b) => b.progressDate.localeCompare(a.progressDate) || b.updatedAt.localeCompare(a.updatedAt))[0]
@@ -76,8 +74,10 @@ function buildOccurrence(
   };
 }
 
-function shouldCarryProgress(task: Task, carryProgressForward: boolean): boolean {
-  return carryProgressForward && task.sourceType !== 'daily';
+function shouldCarryProgress(task: Task, carryProgressForward: boolean, date: string): boolean {
+  if (!carryProgressForward) return false;
+  if (task.sourceType !== 'multi_day') return false;
+  return date <= todayIsoDate();
 }
 
 function resolveOccurrenceStatus(task: Task, directEntry: TaskProgressEntry | undefined): TaskStatus {

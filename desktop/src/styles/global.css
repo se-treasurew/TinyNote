@@ -216,15 +216,25 @@ button {
 }
 
 .quick-entry {
-  padding: 0 14px 10px;
+  padding: 0 14px 8px;
 }
 
-.task-input,
-.inline-add {
+.task-input {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
+  gap: 6px;
+}
+
+.task-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 7px;
+}
+
+.task-input-options {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .task-input input,
@@ -243,40 +253,40 @@ button {
   outline: none;
 }
 
-.task-input input {
-  height: 38px;
-  padding: 0 12px;
+.task-input-row input {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
 }
 
-.task-input-field {
+.task-input-options select,
+.task-input-options input {
+  height: 26px;
+  padding: 0 6px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+.task-input-options .progress-input {
+  width: 48px;
+}
+
+.inline-add {
   display: grid;
-  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.inline-add input {
   min-width: 0;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.task-input-field span {
-  line-height: 1;
-}
-
-.task-input-field select,
-.task-input-field input {
-  height: 28px;
-  padding: 0 7px;
-  font-size: 12px;
-}
-
-.task-input-field.compact {
-  width: 64px;
-}
-
-.task-input-field.date {
-  width: 118px;
-}
-
-.task-input-field.progress {
-  width: 58px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  color: var(--text);
+  outline: none;
 }
 
 .task-input button {
@@ -384,22 +394,22 @@ button {
 .task-list {
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: 6px;
 }
 
 .task-item {
   position: relative;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0;
+  align-items: start;
+  gap: 8px;
+  padding: 4px 0;
 }
 
 .check-button {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
   border-color: color-mix(in srgb, var(--text) 74%, transparent);
   border-radius: 50%;
   background: transparent;
@@ -419,6 +429,25 @@ button {
 
 .task-main {
   min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 16px;
+}
+
+.task-tags {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.task-tags:empty {
+  display: none;
 }
 
 .task-title {
@@ -429,8 +458,8 @@ button {
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.35;
+  font-size: 14px;
+  line-height: 1.3;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -442,34 +471,33 @@ button {
   text-decoration: line-through;
 }
 
-.task-tags {
-  display: flex;
-  gap: 4px;
-  min-height: 14px;
-}
-
 .task-tags span {
   padding: 1px 5px;
   border-radius: 999px;
   background: var(--accent-soft);
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .task-progress {
-  display: grid;
-  grid-template-columns: minmax(54px, 1fr) 34px;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 18px;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
 }
 
 .task-progress input[type='range'] {
   width: 100%;
+  height: 12px;
   accent-color: var(--accent);
 }
 
 .task-progress span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
+  flex-shrink: 0;
+  width: 28px;
   text-align: right;
 }
 
@@ -542,9 +570,9 @@ button {
 
 .completed-section {
   display: grid;
-  gap: 8px;
-  margin-top: 22px;
-  padding-top: 10px;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 8px;
   border-top: 1px solid var(--line);
 }
 
@@ -563,11 +591,7 @@ button {
 }
 
 .completed-list {
-  gap: 6px;
-}
-
-.completed-list .task-item {
-  min-height: 32px;
+  gap: 4px;
 }
 
 .completed-list .task-title {
@@ -578,8 +602,8 @@ button {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  min-height: 62px;
-  padding: 9px 18px;
+  min-height: 54px;
+  padding: 7px 18px;
   border-top: 1px solid var(--line);
   background: var(--bottom);
   backdrop-filter: blur(12px);
