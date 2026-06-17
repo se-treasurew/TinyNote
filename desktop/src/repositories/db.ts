@@ -20,15 +20,40 @@ export async function initializeDatabase(): Promise<void> {
   await initializeDefaultSettings();
 }
 
+const SQLITE_BUSY_CODE = '(code: 5)';
+
+function isBusy(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(SQLITE_BUSY_CODE);
+}
+
+async function beginTransaction(db: TinyNoteDatabase): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await db.execute('BEGIN IMMEDIATE');
+      return;
+    } catch (error) {
+      if (isBusy(error) && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export async function runInTransaction<T>(callback: (db: TinyNoteDatabase) => Promise<T>): Promise<T> {
   const db = await getDb();
-  await db.execute('BEGIN IMMEDIATE');
+  await beginTransaction(db);
   try {
     const result = await callback(db);
     await db.execute('COMMIT');
     return result;
   } catch (error) {
-    await db.execute('ROLLBACK');
+    try {
+      await db.execute('ROLLBACK');
+    } catch {
+      /* preserve original error */
+    }
     throw error;
   }
 }

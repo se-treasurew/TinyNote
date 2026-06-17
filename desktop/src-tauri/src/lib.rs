@@ -94,6 +94,9 @@ fn migrations() -> Vec<Migration> {
         version: 1,
         description: "create_tinynote_mvp_schema",
         sql: r#"
+            PRAGMA journal_mode=WAL;
+            PRAGMA busy_timeout=5000;
+
             CREATE TABLE IF NOT EXISTS tasks (
               id TEXT PRIMARY KEY,
               user_id TEXT,
