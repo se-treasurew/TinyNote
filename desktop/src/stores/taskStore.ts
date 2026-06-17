@@ -51,12 +51,16 @@ function cancelPendingNavigationLoad() {
   }
 }
 
-function scheduleNavigationLoad(load: () => void) {
+function scheduleNavigationLoad(load: () => Promise<void>) {
   cancelPendingNavigationLoad();
   pendingNavigationLoad = setTimeout(() => {
     pendingNavigationLoad = undefined;
-    load();
+    load().catch(() => { /* error already handled in loadTasks */ });
   }, NAVIGATION_LOAD_DELAY_MS);
+}
+
+function abortLoad() {
+  set({ isLoading: false });
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -82,17 +86,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     try {
       let tasks = await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
       if (loadId !== latestTaskLoadId) {
+        abortLoad();
         return;
       }
 
       const generated = await routineService.generateVisibleRoutineTasks(dateWindow.visibleDates, tasks);
       if (loadId !== latestTaskLoadId) {
+        abortLoad();
         return;
       }
 
       if (generated.length > 0) {
         tasks = await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
         if (loadId !== latestTaskLoadId) {
+          abortLoad();
           return;
         }
       }
@@ -123,11 +130,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       visibleStartDate: get().visibleStartDate,
       visibleDays,
     });
-    latestTaskLoadId += 1;
     const dateWindow = buildDateWindow(visibleDays, next.visibleStartDate, next.selectedDate);
-    set({ ...dateWindow, isLoading: false });
-    scheduleNavigationLoad(() => {
-      void get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate);
+    scheduleNavigationLoad(async () => {
+      try {
+        await get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate);
+      } catch {
+        abortLoad();
+      }
     });
   },
 

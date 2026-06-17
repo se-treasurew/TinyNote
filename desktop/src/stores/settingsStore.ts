@@ -31,9 +31,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   async updateSetting(key, value) {
-    const previousSettings = get().settings;
     const updateId = ++latestSettingsUpdateId;
-    set({ settings: { ...previousSettings, [key]: value } });
+    set({ settings: { ...get().settings, [key]: value } });
 
     try {
       const settings = await settingsService.updateSetting(key, value);
@@ -42,7 +41,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
     } catch (error) {
       if (updateId === latestSettingsUpdateId) {
-        set({ settings: previousSettings });
+        const dbSettings = await settingsService.loadSettings().catch(() => null);
+        if (dbSettings) {
+          set({ settings: dbSettings });
+        }
       }
       throw error;
     }

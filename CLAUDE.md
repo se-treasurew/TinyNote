@@ -41,7 +41,7 @@ npm.cmd run typecheck    # tsc --noEmit
 - **Stores** (`src/stores/`)：四个 Zustand store —— `taskStore`（任务、日期、CRUD）、`routineStore`（例行任务）、`settingsStore`（应用设置 + 原生开关）、`uiStore`（面板可见性）。
 - **Components/Pages**：`MainPage.tsx` 是主界面。`ArchivePanel`、`RoutinePanel`、`SettingsPanel` 为浮层面板组件。
 
-**启动流程**（`App.tsx`）：初始化数据库 → 加载设置 → 加载例行任务 → 加载任务（为可见日期范围生成例行任务实例）→ 注册托盘事件监听。
+**启动流程**（`app/App.tsx`）：初始化数据库 → 加载设置 → 加载例行任务 → 加载任务（为可见日期范围生成例行任务实例）→ 注册托盘事件监听。
 
 **任务生命周期**：active → completed → archived（或根据设置 active 直接归档）。软删除设置 `status='deleted'` 并记录 `deleted_at` 时间戳。
 
@@ -51,7 +51,7 @@ npm.cmd run typecheck    # tsc --noEmit
 
 ## 关键技术细节
 
-- **Tauri 插件**：SQL（迁移在 `lib.rs` 中）、window-state、notification、autostart。权限定义在 `src-tauri/capabilities/default.json`。
+- **Tauri 插件**：SQL（迁移在 `lib.rs` 中）、window-state、notification、autostart、dialog、fs。权限定义在 `src-tauri/capabilities/default.json`。
 - **窗口行为**：无边框窗口（自定义标题栏 `TitleBar.tsx`）。关闭时隐藏到托盘而非退出。透明背景支持毛玻璃主题。
 - **主题系统**：7 套主题，通过 CSS 自定义属性实现（`src/styles/global.css`）。通过 `document.documentElement.dataset.theme` 切换。毛玻璃主题使用 `backdrop-filter: blur(22px)`。窗口透明度可配置（默认 0.82）。
 - **测试**：Vitest 2 + jsdom + `@testing-library/react` + `@testing-library/jest-dom`。Tauri API 通过 `vi.mock()` 模拟。配置文件 `src/test/setup.ts`。
@@ -59,4 +59,4 @@ npm.cmd run typecheck    # tsc --noEmit
 
 ## 版本
 
-当前版本 0.1.2 —— 需同步更新 `package.json`、`Cargo.toml`、`tauri.conf.json` 和 `TitleBar` 组件中的版本号。
+当前版本 0.1.5 —— 需同步更新 `package.json`、`Cargo.toml`、`tauri.conf.json` 和 `TitleBar` 组件中的版本号。
