@@ -5,11 +5,16 @@ import {
   selectWithRetry,
   type TinyNoteDatabase,
 } from './db';
-import type { Task, TaskRow } from '../types/task';
+import type { Task, TaskProgressEntry, TaskProgressEntryRow, TaskRow } from '../types/task';
 
 const taskColumns = `
-  id, user_id, device_id, title, content, task_date, status, priority, source_type,
+  id, user_id, device_id, title, content, task_date, end_date, status, priority, source_type,
   routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at,
+  created_at, updated_at, sync_status, version
+`;
+
+const taskProgressEntryColumns = `
+  id, task_id, progress_date, percent, status, completed_at, archived_at, deleted_at,
   created_at, updated_at, sync_status, version
 `;
 
@@ -18,8 +23,11 @@ export class TaskRepository {
     const rows = await selectWithRetry<TaskRow[]>(
       `SELECT ${taskColumns}
        FROM tasks
-       WHERE task_date BETWEEN $1 AND $2
-         AND status != 'deleted'
+       WHERE status != 'deleted'
+         AND (
+           (source_type = 'manual' AND task_date <= $2)
+           OR (source_type IN ('daily', 'multi_day') AND task_date <= $2 AND (end_date IS NULL OR end_date >= $1))
+         )
        ORDER BY task_date ASC, sort_order ASC, created_at ASC`,
       [startDate, endDate],
     );
@@ -59,7 +67,7 @@ export class TaskRepository {
   async insert(task: Task): Promise<void> {
     await executeWrite(
       `INSERT INTO tasks (${taskColumns})
-       VALUES (${placeholders(19)})`,
+       VALUES (${placeholders(20)})`,
       taskToParams(task),
     );
   }
@@ -80,18 +88,19 @@ export class TaskRepository {
            title = $4,
            content = $5,
            task_date = $6,
-           status = $7,
-           priority = $8,
-           source_type = $9,
-           routine_id = $10,
-           parent_task_id = $11,
-           sort_order = $12,
-           completed_at = $13,
-           archived_at = $14,
-           deleted_at = $15,
-           updated_at = $16,
-           sync_status = $17,
-           version = $18
+           end_date = $7,
+           status = $8,
+           priority = $9,
+           source_type = $10,
+           routine_id = $11,
+           parent_task_id = $12,
+           sort_order = $13,
+           completed_at = $14,
+           archived_at = $15,
+           deleted_at = $16,
+           updated_at = $17,
+           sync_status = $18,
+           version = $19
        WHERE id = $1`,
       taskToUpdateParams(task),
     );
@@ -100,13 +109,14 @@ export class TaskRepository {
   async upsert(task: Task): Promise<void> {
     await executeWrite(
       `INSERT INTO tasks (${taskColumns})
-       VALUES (${placeholders(19)})
+       VALUES (${placeholders(20)})
        ON CONFLICT(id) DO UPDATE SET
          user_id = excluded.user_id,
          device_id = excluded.device_id,
          title = excluded.title,
          content = excluded.content,
          task_date = excluded.task_date,
+         end_date = excluded.end_date,
          status = excluded.status,
          priority = excluded.priority,
          source_type = excluded.source_type,
@@ -123,6 +133,62 @@ export class TaskRepository {
       taskToParams(task),
     );
   }
+
+  async listProgressEntries(taskIds: string[], endDate: string): Promise<TaskProgressEntry[]> {
+    if (taskIds.length === 0) {
+      return [];
+    }
+
+    const taskIdPlaceholders = taskIds.map((_, index) => `$${index + 1}`).join(', ');
+    const rows = await selectWithRetry<TaskProgressEntryRow[]>(
+      `SELECT ${taskProgressEntryColumns}
+       FROM task_progress_entries
+       WHERE task_id IN (${taskIdPlaceholders})
+         AND progress_date <= $${taskIds.length + 1}
+         AND status != 'deleted'
+       ORDER BY progress_date ASC, updated_at ASC`,
+      [...taskIds, endDate],
+    );
+    return rows.map(mapTaskProgressEntryRow);
+  }
+
+  async listAllProgressEntries(): Promise<TaskProgressEntry[]> {
+    const rows = await selectWithRetry<TaskProgressEntryRow[]>(
+      `SELECT ${taskProgressEntryColumns}
+       FROM task_progress_entries
+       ORDER BY updated_at DESC`,
+    );
+    return rows.map(mapTaskProgressEntryRow);
+  }
+
+  async findProgressEntry(taskId: string, progressDate: string): Promise<TaskProgressEntry | null> {
+    const rows = await selectWithRetry<TaskProgressEntryRow[]>(
+      `SELECT ${taskProgressEntryColumns}
+       FROM task_progress_entries
+       WHERE task_id = $1
+         AND progress_date = $2
+       LIMIT 1`,
+      [taskId, progressDate],
+    );
+    return rows[0] ? mapTaskProgressEntryRow(rows[0]) : null;
+  }
+
+  async upsertProgressEntry(entry: TaskProgressEntry): Promise<void> {
+    await executeWrite(
+      `INSERT INTO task_progress_entries (${taskProgressEntryColumns})
+       VALUES (${placeholders(12)})
+       ON CONFLICT(task_id, progress_date) DO UPDATE SET
+         percent = excluded.percent,
+         status = excluded.status,
+         completed_at = excluded.completed_at,
+         archived_at = excluded.archived_at,
+         deleted_at = excluded.deleted_at,
+         updated_at = excluded.updated_at,
+         sync_status = excluded.sync_status,
+         version = excluded.version`,
+      taskProgressEntryToParams(entry),
+    );
+  }
 }
 
 export function mapTaskRow(row: TaskRow): Task {
@@ -133,12 +199,30 @@ export function mapTaskRow(row: TaskRow): Task {
     title: row.title,
     content: row.content,
     taskDate: row.task_date,
+    endDate: row.end_date,
     status: row.status,
     priority: row.priority,
     sourceType: row.source_type,
     routineId: row.routine_id,
     parentTaskId: row.parent_task_id,
     sortOrder: row.sort_order,
+    completedAt: row.completed_at,
+    archivedAt: row.archived_at,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    syncStatus: row.sync_status,
+    version: row.version,
+  };
+}
+
+export function mapTaskProgressEntryRow(row: TaskProgressEntryRow): TaskProgressEntry {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    progressDate: row.progress_date,
+    percent: row.percent,
+    status: row.status,
     completedAt: row.completed_at,
     archivedAt: row.archived_at,
     deletedAt: row.deleted_at,
@@ -157,6 +241,7 @@ export function taskToParams(task: Task): unknown[] {
     task.title,
     task.content,
     task.taskDate,
+    task.endDate,
     task.status,
     task.priority,
     task.sourceType,
@@ -181,6 +266,7 @@ export function taskToUpdateParams(task: Task): unknown[] {
     task.title,
     task.content,
     task.taskDate,
+    task.endDate,
     task.status,
     task.priority,
     task.sourceType,
@@ -196,11 +282,28 @@ export function taskToUpdateParams(task: Task): unknown[] {
   ];
 }
 
+export function taskProgressEntryToParams(entry: TaskProgressEntry): unknown[] {
+  return [
+    entry.id,
+    entry.taskId,
+    entry.progressDate,
+    entry.percent,
+    entry.status,
+    entry.completedAt,
+    entry.archivedAt,
+    entry.deletedAt,
+    entry.createdAt,
+    entry.updatedAt,
+    entry.syncStatus,
+    entry.version,
+  ];
+}
+
 async function insertTask(db: TinyNoteDatabase, task: Task): Promise<void> {
   await executeInTransaction(
     db,
     `INSERT INTO tasks (${taskColumns})
-     VALUES (${placeholders(19)})`,
+     VALUES (${placeholders(20)})`,
     taskToParams(task),
   );
 }

@@ -19,6 +19,7 @@ export interface AppSettings {
   theme: ThemeMode;
   fontSize: number;
   backgroundImageDataUrl: string | null;
+  carryProgressForward: boolean;
 }
 
 export type AppSettingKey = keyof AppSettings;
@@ -41,4 +42,5 @@ export const defaultSettings: AppSettings = {
   theme: 'glass-blue',
   fontSize: 13,
   backgroundImageDataUrl: null,
+  carryProgressForward: false,
 };

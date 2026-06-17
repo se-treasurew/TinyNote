@@ -178,5 +178,36 @@ fn migrations() -> Vec<Migration> {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "add_task_progress_and_clear_legacy_routines",
+            sql: r#"
+            ALTER TABLE tasks ADD COLUMN end_date TEXT;
+
+            CREATE TABLE IF NOT EXISTS task_progress_entries (
+              id TEXT PRIMARY KEY,
+              task_id TEXT NOT NULL,
+              progress_date TEXT NOT NULL,
+              percent INTEGER NOT NULL DEFAULT 0,
+              status TEXT NOT NULL DEFAULT 'active',
+              completed_at TEXT,
+              archived_at TEXT,
+              deleted_at TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sync_status TEXT NOT NULL DEFAULT 'local',
+              version INTEGER NOT NULL DEFAULT 1,
+              UNIQUE(task_id, progress_date)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_task_progress_task_date ON task_progress_entries(task_id, progress_date);
+            CREATE INDEX IF NOT EXISTS idx_task_progress_status ON task_progress_entries(status);
+
+            DELETE FROM tasks WHERE routine_id IS NOT NULL OR source_type = 'routine_daily';
+            DELETE FROM routine_instances;
+            DELETE FROM routines;
+        "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

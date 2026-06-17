@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { initializeDatabase } from '../repositories/db';
-import { useRoutineStore } from '../stores/routineStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
 import { useUiStore } from '../stores/uiStore';
@@ -16,7 +15,6 @@ export function App() {
   const toggleTopmost = useSettingsStore((state) => state.toggleTopmost);
   const loadTasks = useTaskStore((state) => state.loadTasks);
   const setSelectedDate = useTaskStore((state) => state.setSelectedDate);
-  const loadRoutines = useRoutineStore((state) => state.loadRoutines);
   const openPanel = useUiStore((state) => state.openPanel);
 
   useEffect(() => {
@@ -26,8 +24,7 @@ export function App() {
       try {
         await initializeDatabase();
         const settings = await loadSettings();
-        await loadRoutines();
-        await loadTasks(settings.visibleDays);
+        await loadTasks(settings.visibleDays, undefined, undefined, settings.carryProgressForward);
         if (settings.startMinimizedToTray || !settings.showOnStartup) {
           await trayService.hideWindow();
         }
@@ -53,7 +50,7 @@ export function App() {
     return () => {
       unlisten?.();
     };
-  }, [loadSettings, loadRoutines, loadTasks, openPanel, setSelectedDate, toggleAutostart, toggleLockWindow, toggleTopmost]);
+  }, [loadSettings, loadTasks, openPanel, setSelectedDate, toggleAutostart, toggleLockWindow, toggleTopmost]);
 
   if (startupError) {
     return (

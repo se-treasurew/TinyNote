@@ -40,7 +40,7 @@ export function buildDailyRoutineInstances(input: BuildDailyRoutineInstancesInpu
         content: routine.description,
         taskDate: date,
         routineId: routine.id,
-        sourceType: 'routine_daily',
+        sourceType: 'daily',
         deviceId: input.deviceId,
         now: input.now,
         sortOrder: index,
@@ -71,7 +71,7 @@ function createTaskDraft(input: {
   content: string | null;
   taskDate: string;
   routineId: string;
-  sourceType: 'routine_daily' | 'multi_day';
+  sourceType: 'daily' | 'multi_day';
   deviceId: string;
   now: string;
   sortOrder: number;
@@ -82,6 +82,7 @@ function createTaskDraft(input: {
     title: input.title,
     content: input.content,
     taskDate: input.taskDate,
+    endDate: null,
     status: 'active',
     priority: 'none',
     sourceType: input.sourceType,

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CreateTaskInput, Task, TasksByDate, UpdateTaskInput } from '../types/task';
+import type { CreateTaskInput, Task, TaskOccurrence, TasksByDate, UpdateTaskInput } from '../types/task';
 import { taskService } from '../services/taskService';
 import { navigateDate as calculateDateNavigation, resolveVisibleStartForDate } from '../services/dateNavigation';
 import {
@@ -10,27 +10,32 @@ import {
   groupDateDisplayTasksByDate,
 } from '../services/taskWorkflow';
 import { getVisibleDateRange, todayIsoDate } from '../utils/date';
-import { routineService } from '../services/routineService';
 
 let latestTaskLoadId = 0;
-let latestRoutineGenerationId = 0;
 let pendingNavigationLoad: ReturnType<typeof setTimeout> | undefined;
 const NAVIGATION_LOAD_DELAY_MS = 120;
 
 interface TaskState {
-  tasks: Task[];
+  tasks: TaskOccurrence[];
   archiveTasks: Task[];
   tasksByDate: TasksByDate;
   visibleDates: string[];
   visibleStartDate: string;
   visibleDays: number;
+  carryProgressForward: boolean;
   selectedDate: string;
   isLoading: boolean;
-  loadTasks: (visibleDays?: number, startDate?: string, selectedDate?: string) => Promise<void>;
+  loadTasks: (
+    visibleDays?: number,
+    startDate?: string,
+    selectedDate?: string,
+    carryProgressForward?: boolean,
+  ) => Promise<void>;
   loadArchive: () => Promise<void>;
-  navigateDate: (direction: -1 | 1, visibleDays?: number) => Promise<void>;
-  addTask: (input: CreateTaskInput) => Promise<void>;
+  navigateDate: (direction: -1 | 1, visibleDays?: number, carryProgressForward?: boolean) => Promise<void>;
+  addTask: (input: CreateTaskInput) => Promise<TaskOccurrence>;
   updateTask: (id: string, input: UpdateTaskInput) => Promise<void>;
+  updateTaskProgress: (id: string, progressDate: string, percent: number) => Promise<void>;
   completeTask: (id: string, completeToArchive: boolean) => Promise<void>;
   archiveTask: (id: string) => Promise<void>;
   restoreTask: (id: string) => Promise<void>;
@@ -66,15 +71,15 @@ function scheduleNavigationLoad(load: () => Promise<void>) {
   }, NAVIGATION_LOAD_DELAY_MS);
 }
 
-function taskCollectionPatch(tasks: Task[]) {
+function taskCollectionPatch(tasks: TaskOccurrence[]) {
   return {
     tasks,
     tasksByDate: groupDateDisplayTasksByDate(tasks),
   };
 }
 
-function mergeVisibleTask(tasks: Task[], task: Task, visibleDates: string[]): Task[] {
-  const withoutTask = tasks.filter((item) => item.id !== task.id);
+function mergeVisibleTask(tasks: TaskOccurrence[], task: TaskOccurrence, visibleDates: string[]): TaskOccurrence[] {
+  const withoutTask = tasks.filter((item) => !(item.id === task.id && item.taskDate === task.taskDate));
   if (task.status === 'deleted' || !visibleDates.includes(task.taskDate)) {
     return withoutTask;
   }
@@ -82,14 +87,17 @@ function mergeVisibleTask(tasks: Task[], task: Task, visibleDates: string[]): Ta
   return [...withoutTask, task];
 }
 
-function removeTask(tasks: Task[], id: string): Task[] {
+function removeTask(tasks: TaskOccurrence[], id: string): TaskOccurrence[] {
   return tasks.filter((task) => task.id !== id);
 }
 
 function invalidatePendingLoads() {
   cancelPendingNavigationLoad();
   latestTaskLoadId += 1;
-  latestRoutineGenerationId += 1;
+}
+
+function findCurrentOccurrence(tasks: TaskOccurrence[], id: string, selectedDate: string): TaskOccurrence | undefined {
+  return tasks.find((task) => task.id === id && task.taskDate === selectedDate) ?? tasks.find((task) => task.id === id);
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -99,6 +107,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   visibleDates: getVisibleDateRange(todayIsoDate(), 7),
   visibleStartDate: todayIsoDate(),
   visibleDays: 7,
+  carryProgressForward: false,
   selectedDate: todayIsoDate(),
   isLoading: false,
 
@@ -106,49 +115,28 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     visibleDays = get().visibleDays,
     startDate = get().visibleStartDate,
     selectedDate = get().selectedDate,
+    carryProgressForward = get().carryProgressForward,
   ) {
     cancelPendingNavigationLoad();
     const dateWindow = buildDateWindow(visibleDays, startDate, selectedDate);
     const loadId = ++latestTaskLoadId;
-    set({ ...dateWindow, isLoading: true });
+    set({ ...dateWindow, carryProgressForward, isLoading: true });
 
     try {
-      const tasks = await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
+      const tasks = carryProgressForward
+        ? await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays, carryProgressForward)
+        : await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
       if (loadId !== latestTaskLoadId) {
         return;
       }
 
       set({
         ...dateWindow,
+        carryProgressForward,
         tasks,
         tasksByDate: groupDateDisplayTasksByDate(tasks),
         isLoading: false,
       });
-      const routineGenerationId = ++latestRoutineGenerationId;
-      routineService.generateVisibleRoutineTasks(dateWindow.visibleDates, tasks)
-        .then(async (generated) => {
-          if (generated.length === 0) {
-            return;
-          }
-          if (loadId !== latestTaskLoadId || routineGenerationId !== latestRoutineGenerationId) {
-            return;
-          }
-
-          const refreshedTasks = await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
-          if (loadId !== latestTaskLoadId || routineGenerationId !== latestRoutineGenerationId) {
-            return;
-          }
-
-          set({
-            ...dateWindow,
-            tasks: refreshedTasks,
-            tasksByDate: groupDateDisplayTasksByDate(refreshedTasks),
-            isLoading: false,
-          });
-        })
-        .catch((error) => {
-          console.error('Failed to generate routine tasks', error);
-        });
     } catch (error) {
       if (loadId === latestTaskLoadId) {
         set({ isLoading: false });
@@ -162,7 +150,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ archiveTasks });
   },
 
-  async navigateDate(direction, visibleDays = get().visibleDays) {
+  async navigateDate(direction, visibleDays = get().visibleDays, carryProgressForward = get().carryProgressForward) {
     const next = calculateDateNavigation({
       direction,
       selectedDate: get().selectedDate,
@@ -171,10 +159,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     });
     const dateWindow = buildDateWindow(visibleDays, next.visibleStartDate, next.selectedDate);
     latestTaskLoadId += 1;
-    latestRoutineGenerationId += 1;
-    set({ ...dateWindow, isLoading: false });
+    set({ ...dateWindow, carryProgressForward, isLoading: false });
     scheduleNavigationLoad(async () => {
-      await get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate);
+      await get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate, carryProgressForward);
     });
   },
 
@@ -184,11 +171,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const task = await taskService.addTask(input);
     const startDate = resolveVisibleStartForDate(input.taskDate, get().visibleStartDate, get().visibleDays);
     if (startDate !== get().visibleStartDate) {
-      await get().loadTasks(get().visibleDays, startDate, input.taskDate);
-      return;
+      await get().loadTasks(get().visibleDays, startDate, input.taskDate, get().carryProgressForward);
+      return task;
     }
 
     set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, task, state.visibleDates)));
+    return task;
   },
 
   async updateTask(id, input) {
@@ -196,12 +184,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: false });
     const current = get().tasks.find((task) => task.id === id);
     if (current) {
-      const optimistic: Task = {
+      const optimistic: TaskOccurrence = {
         ...current,
         ...input,
         title: input.title ?? current.title,
         content: input.content === undefined ? current.content : input.content,
         taskDate: input.taskDate ?? current.taskDate,
+        endDate: input.endDate === undefined ? current.endDate : input.endDate,
         updatedAt: new Date().toISOString(),
         syncStatus: 'pending',
         version: current.version + 1,
@@ -217,28 +206,50 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       get().visibleDays,
     );
     if (startDate !== get().visibleStartDate) {
-      await get().loadTasks(get().visibleDays, startDate, selectedDate);
+      await get().loadTasks(get().visibleDays, startDate, selectedDate, get().carryProgressForward);
       return;
     }
 
     set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
   },
 
+  async updateTaskProgress(id, progressDate, percent) {
+    invalidatePendingLoads();
+    set({ isLoading: false });
+    const current = findCurrentOccurrence(get().tasks, id, progressDate);
+    if (current) {
+      set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, {
+        ...current,
+        progressPercent: Math.max(0, Math.min(100, Math.round(percent))),
+        updatedAt: new Date().toISOString(),
+        syncStatus: 'pending',
+      }, state.visibleDates)));
+    }
+
+    try {
+      const updated = await taskService.updateTaskProgress(id, progressDate, percent, get().carryProgressForward);
+      set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
+    } catch (error) {
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
+      throw error;
+    }
+  },
+
   async completeTask(id, completeToArchive) {
     invalidatePendingLoads();
     set({ isLoading: false });
-    const current = get().tasks.find((task) => task.id === id);
+    const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
     if (current) {
       const optimistic = applyComplete(current, completeToArchive, new Date().toISOString());
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
     }
 
     try {
-      const updated = await taskService.completeTask(id, completeToArchive);
+      const updated = await taskService.completeTask(id, completeToArchive, current?.taskDate ?? get().selectedDate);
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
       void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
       throw error;
     }
   },
@@ -246,7 +257,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   async archiveTask(id) {
     invalidatePendingLoads();
     set({ isLoading: false });
-    const current = get().tasks.find((task) => task.id === id);
+    const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
     if (current) {
       const optimistic = applyArchive(current, new Date().toISOString());
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
@@ -257,7 +268,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
       void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
       throw error;
     }
   },
@@ -265,18 +276,18 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   async restoreTask(id) {
     invalidatePendingLoads();
     set({ isLoading: false });
-    const current = get().tasks.find((task) => task.id === id);
+    const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
     if (current) {
       const optimistic = applyRestore(current, new Date().toISOString());
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
     }
 
     try {
-      const updated = await taskService.restoreTask(id);
+      const updated = await taskService.restoreTask(id, current?.taskDate ?? get().selectedDate);
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
       void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
       throw error;
     }
   },
@@ -284,7 +295,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   async deleteTask(id) {
     invalidatePendingLoads();
     set({ isLoading: false });
-    const current = get().tasks.find((task) => task.id === id);
+    const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
     if (current) {
       set((state) => taskCollectionPatch(removeTask(state.tasks, id)));
     }
@@ -294,7 +305,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       set((state) => taskCollectionPatch(removeTask(state.tasks, id)));
       void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
       throw error;
     }
   },

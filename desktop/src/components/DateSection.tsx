@@ -1,13 +1,13 @@
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { Task } from '../types/task';
+import type { TaskOccurrence } from '../types/task';
 import { formatShortDate } from '../utils/date';
 import { useTaskStore } from '../stores/taskStore';
 import { TaskItem } from './TaskItem';
 
 interface DateSectionProps {
   date: string;
-  tasks: Task[];
+  tasks: TaskOccurrence[];
   selected: boolean;
   onSelect: () => void;
 }

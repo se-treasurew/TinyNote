@@ -17,6 +17,7 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
   title: '写计划',
   content: null,
   taskDate: '2026-06-16',
+  endDate: null,
   status: 'active',
   priority: 'none',
   sourceType: 'manual',

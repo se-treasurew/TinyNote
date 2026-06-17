@@ -27,4 +27,16 @@ describe('Tauri SQL migrations', () => {
 
     expect(migrationSql(libRs, 2)).toContain('PRAGMA journal_mode=WAL');
   });
+
+  it('adds task progress support and clears legacy routine-generated data in migration 3', () => {
+    const libRs = readFileSync(resolve(process.cwd(), 'src-tauri/src/lib.rs'), 'utf8');
+    const migration = migrationSql(libRs, 3);
+
+    expect(migration).toContain('ALTER TABLE tasks ADD COLUMN end_date TEXT');
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS task_progress_entries');
+    expect(migration).toContain('UNIQUE(task_id, progress_date)');
+    expect(migration).toContain("DELETE FROM tasks WHERE routine_id IS NOT NULL OR source_type = 'routine_daily'");
+    expect(migration).toContain('DELETE FROM routine_instances');
+    expect(migration).toContain('DELETE FROM routines');
+  });
 });

@@ -1,6 +1,6 @@
 import type { AppSettings } from '../types/settings';
 import type { Routine, RoutineInstance } from '../types/routine';
-import type { Task } from '../types/task';
+import type { Task, TaskProgressEntry } from '../types/task';
 
 export interface SyncableRecord {
   id: string;
@@ -11,6 +11,16 @@ export interface SyncableRecord {
 }
 
 export interface TinyNoteExport {
+  schemaVersion: 2;
+  exportedAt: string;
+  tasks: Task[];
+  routines: Routine[];
+  routineInstances: RoutineInstance[];
+  taskProgressEntries: TaskProgressEntry[];
+  settings: AppSettings;
+}
+
+export interface TinyNoteExportV1 {
   schemaVersion: 1;
   exportedAt: string;
   tasks: Task[];
@@ -18,6 +28,8 @@ export interface TinyNoteExport {
   routineInstances: RoutineInstance[];
   settings: AppSettings;
 }
+
+export type TinyNoteImport = TinyNoteExport | TinyNoteExportV1;
 
 export function chooseMergedRecord<T extends SyncableRecord>(local: T, incoming: T): T {
   if (isDeleted(local) && !isDeleted(incoming)) {
@@ -39,15 +51,17 @@ export function createExportPayload(input: {
   tasks: Task[];
   routines: Routine[];
   routineInstances: RoutineInstance[];
+  taskProgressEntries: TaskProgressEntry[];
   settings: AppSettings;
   now?: string;
 }): TinyNoteExport {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: input.now ?? new Date().toISOString(),
     tasks: input.tasks,
     routines: input.routines,
     routineInstances: input.routineInstances,
+    taskProgressEntries: input.taskProgressEntries,
     settings: input.settings,
   };
 }

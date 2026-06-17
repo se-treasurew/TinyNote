@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsPanel } from './SettingsPanel';
 import { defaultSettings, type AppSettings } from '../types/settings';
-import { useRoutineStore } from '../stores/routineStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
 import { useUiStore } from '../stores/uiStore';
@@ -30,9 +29,6 @@ describe('SettingsPanel theme choices', () => {
     });
     useTaskStore.setState({
       loadTasks: vi.fn(async () => undefined),
-    });
-    useRoutineStore.setState({
-      loadRoutines: vi.fn(async () => undefined),
     });
     useUiStore.setState({
       closePanel: vi.fn(),
@@ -85,5 +81,13 @@ describe('SettingsPanel theme choices', () => {
     fireEvent.click(screen.getByRole('button', { name: '清除背景图片' }));
 
     expect(updateSetting).toHaveBeenCalledWith('backgroundImageDataUrl', null);
+  });
+
+  it('updates the carry-progress setting', () => {
+    render(<SettingsPanel />);
+
+    fireEvent.click(screen.getByLabelText('进度顺延'));
+
+    expect(updateSetting).toHaveBeenCalledWith('carryProgressForward', true);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { chooseMergedRecord } from './syncService';
+import { chooseMergedRecord, createExportPayload } from './syncService';
+import { defaultSettings } from '../types/settings';
 
 type RecordShape = {
   id: string;
@@ -51,5 +52,32 @@ describe('sync/import merge rules', () => {
 
     expect(chooseMergedRecord(oldRecord, newRecord)).toBe(newRecord);
     expect(chooseMergedRecord(newRecord, sameVersionNewer)).toBe(sameVersionNewer);
+  });
+
+  it('exports schema version 2 with task progress entries', () => {
+    const payload = createExportPayload({
+      tasks: [],
+      routines: [],
+      routineInstances: [],
+      taskProgressEntries: [{
+        id: 'progress-1',
+        taskId: 'task-1',
+        progressDate: '2026-06-18',
+        percent: 45,
+        status: 'active',
+        completedAt: null,
+        archivedAt: null,
+        deletedAt: null,
+        createdAt: '2026-06-18T00:00:00.000Z',
+        updatedAt: '2026-06-18T00:00:00.000Z',
+        syncStatus: 'local',
+        version: 1,
+      }],
+      settings: defaultSettings,
+      now: '2026-06-18T00:00:00.000Z',
+    });
+
+    expect(payload.schemaVersion).toBe(2);
+    expect(payload.taskProgressEntries).toHaveLength(1);
   });
 });

@@ -1,4 +1,4 @@
-import { Archive, CalendarClock, Lock, Pin, PinOff, Settings, Unlock } from 'lucide-react';
+import { Archive, Lock, Pin, PinOff, Settings, Unlock } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUiStore } from '../stores/uiStore';
 import { windowService } from '../services/windowService';
@@ -18,12 +18,9 @@ export function TitleBar() {
     >
       <div className="title-copy">
         <strong>小笺</strong>
-        <span>v0.1.6</span>
+        <span>v0.1.11</span>
       </div>
       <nav className="title-actions" onMouseDown={(event) => event.stopPropagation()}>
-        <button type="button" title="Routine" aria-label="Routine" onClick={() => openPanel('routine')}>
-          <CalendarClock size={16} />
-        </button>
         <button type="button" title="归档" aria-label="归档" onClick={() => openPanel('archive')}>
           <Archive size={16} />
         </button>

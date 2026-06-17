@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Task } from '../types/task';
+import type { TaskOccurrence } from '../types/task';
 import { useTaskStore } from './taskStore';
 
 const mocks = vi.hoisted(() => ({
   loadVisibleTasks: vi.fn(),
   addTask: vi.fn(),
   updateTask: vi.fn(),
+  updateTaskProgress: vi.fn(),
   completeTask: vi.fn(),
   deleteTask: vi.fn(),
-  generateVisibleRoutineTasks: vi.fn(),
 }));
 
 vi.mock('../services/taskService', () => ({
@@ -17,6 +17,7 @@ vi.mock('../services/taskService', () => ({
     loadArchive: vi.fn(async () => []),
     addTask: mocks.addTask,
     updateTask: mocks.updateTask,
+    updateTaskProgress: mocks.updateTaskProgress,
     completeTask: mocks.completeTask,
     archiveTask: vi.fn(),
     restoreTask: vi.fn(),
@@ -24,19 +25,14 @@ vi.mock('../services/taskService', () => ({
   },
 }));
 
-vi.mock('../services/routineService', () => ({
-  routineService: {
-    generateVisibleRoutineTasks: mocks.generateVisibleRoutineTasks,
-  },
-}));
-
-const baseTask = (overrides: Partial<Task> = {}): Task => ({
+const baseTask = (overrides: Partial<TaskOccurrence> = {}): TaskOccurrence => ({
   id: 'task-1',
   userId: null,
   deviceId: 'device-a',
   title: '阅读器PPT',
   content: null,
   taskDate: '2026-06-18',
+  endDate: null,
   status: 'active',
   priority: 'none',
   sourceType: 'manual',
@@ -50,6 +46,10 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
   updatedAt: '2026-06-18T00:00:00.000Z',
   syncStatus: 'local',
   version: 1,
+  definitionTaskDate: '2026-06-18',
+  occurrenceDate: '2026-06-18',
+  progressPercent: 0,
+  progressEntryId: null,
   ...overrides,
 });
 
@@ -69,9 +69,9 @@ describe('task store date window behavior', () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     mocks.loadVisibleTasks.mockResolvedValue([]);
-    mocks.generateVisibleRoutineTasks.mockResolvedValue([]);
     mocks.addTask.mockResolvedValue(baseTask());
     mocks.updateTask.mockResolvedValue(baseTask());
+    mocks.updateTaskProgress.mockResolvedValue(baseTask({ progressPercent: 60 }));
     mocks.completeTask.mockResolvedValue(baseTask({ status: 'completed' }));
     mocks.deleteTask.mockResolvedValue(baseTask({ status: 'deleted', deletedAt: '2026-06-18T01:00:00.000Z' }));
     useTaskStore.setState({
@@ -81,6 +81,7 @@ describe('task store date window behavior', () => {
       visibleDates: ['2026-06-17', '2026-06-18', '2026-06-19'],
       visibleStartDate: '2026-06-17',
       visibleDays: 3,
+      carryProgressForward: false,
       selectedDate: '2026-06-18',
       isLoading: false,
     });
@@ -145,8 +146,8 @@ describe('task store date window behavior', () => {
       visibleDays: 2,
       selectedDate: '2026-06-17',
     });
-    const olderLoad = deferred<Task[]>();
-    const newerLoad = deferred<Task[]>();
+    const olderLoad = deferred<TaskOccurrence[]>();
+    const newerLoad = deferred<TaskOccurrence[]>();
     const olderTask = baseTask({ id: 'older-task', taskDate: '2026-06-18', title: '旧窗口任务' });
     const newerTask = baseTask({ id: 'newer-task', taskDate: '2026-06-19', title: '新窗口任务' });
     mocks.loadVisibleTasks.mockImplementationOnce(() => olderLoad.promise);
@@ -173,7 +174,7 @@ describe('task store date window behavior', () => {
       selectedDate: '2026-06-17',
       isLoading: false,
     });
-    const staleLoad = deferred<Task[]>();
+    const staleLoad = deferred<TaskOccurrence[]>();
     mocks.loadVisibleTasks.mockImplementationOnce(() => staleLoad.promise);
 
     const staleRefresh = useTaskStore.getState().loadTasks(2, '2026-06-16', '2026-06-17');
@@ -193,7 +194,7 @@ describe('task store date window behavior', () => {
   });
 
   it('does not leave loading stuck when a task operation invalidates an in-flight load', async () => {
-    const staleLoad = deferred<Task[]>();
+    const staleLoad = deferred<TaskOccurrence[]>();
     mocks.loadVisibleTasks.mockImplementationOnce(() => staleLoad.promise);
     const task = baseTask({ id: 'task-1', taskDate: '2026-06-18', status: 'active' });
     useTaskStore.setState({
@@ -243,10 +244,65 @@ describe('task store date window behavior', () => {
     expect(mocks.loadVisibleTasks).toHaveBeenCalledTimes(callsAfterAdd);
   });
 
-  it('shows a completed task immediately after rapid navigation while routine generation is still pending', async () => {
+  it('loads visible tasks without triggering legacy routine generation', async () => {
     vi.useFakeTimers();
-    const routineGeneration = deferred<Task[]>();
-    mocks.generateVisibleRoutineTasks.mockReturnValue(routineGeneration.promise);
+    mocks.loadVisibleTasks.mockResolvedValue([]);
+    useTaskStore.setState({
+      tasks: [],
+      tasksByDate: {},
+      visibleDates: ['2026-06-17', '2026-06-18'],
+      visibleStartDate: '2026-06-17',
+      visibleDays: 2,
+      selectedDate: '2026-06-18',
+      isLoading: false,
+    });
+
+    await useTaskStore.getState().loadTasks(2, '2026-06-17', '2026-06-18', true);
+
+    expect(mocks.loadVisibleTasks).toHaveBeenCalledWith('2026-06-17', 2, true);
+  });
+
+  it('passes the occurrence date when completing a recurring task', async () => {
+    const task = baseTask({ id: 'daily-1', sourceType: 'daily', taskDate: '2026-06-18' });
+    mocks.completeTask.mockResolvedValue(baseTask({
+      id: 'daily-1',
+      sourceType: 'daily',
+      taskDate: '2026-06-18',
+      status: 'completed',
+    }));
+    useTaskStore.setState({
+      tasks: [task],
+      tasksByDate: { '2026-06-18': [task] },
+      selectedDate: '2026-06-18',
+    });
+
+    await useTaskStore.getState().completeTask('daily-1', false);
+
+    expect(mocks.completeTask).toHaveBeenCalledWith('daily-1', false, '2026-06-18');
+    expect(useTaskStore.getState().tasksByDate['2026-06-18']?.[0]?.status).toBe('completed');
+  });
+
+  it('updates task progress in the current occurrence', async () => {
+    const task = baseTask({ id: 'task-1', taskDate: '2026-06-18', progressPercent: 10 });
+    mocks.updateTaskProgress.mockResolvedValue(baseTask({
+      id: 'task-1',
+      taskDate: '2026-06-18',
+      progressPercent: 70,
+    }));
+    useTaskStore.setState({
+      tasks: [task],
+      tasksByDate: { '2026-06-18': [task] },
+      selectedDate: '2026-06-18',
+    });
+
+    await useTaskStore.getState().updateTaskProgress('task-1', '2026-06-18', 70);
+
+    expect(mocks.updateTaskProgress).toHaveBeenCalledWith('task-1', '2026-06-18', 70, false);
+    expect(useTaskStore.getState().tasksByDate['2026-06-18']?.[0]?.progressPercent).toBe(70);
+  });
+
+  it('shows a completed task immediately after rapid navigation', async () => {
+    vi.useFakeTimers();
     useTaskStore.setState({
       tasks: [],
       tasksByDate: {},
@@ -261,7 +317,6 @@ describe('task store date window behavior', () => {
       await useTaskStore.getState().navigateDate(1, 2);
     }
     await vi.runOnlyPendingTimersAsync();
-    expect(mocks.generateVisibleRoutineTasks).toHaveBeenCalled();
 
     const selectedAfterNavigation = useTaskStore.getState().selectedDate;
     const task = baseTask({ id: 'task-1', taskDate: selectedAfterNavigation, status: 'active' });
@@ -282,7 +337,6 @@ describe('task store date window behavior', () => {
     expect(useTaskStore.getState().tasksByDate[selectedAfterNavigation]?.[0]?.status).toBe('completed');
 
     await completion;
-    routineGeneration.resolve([baseTask({ id: 'routine-late', taskDate: selectedAfterNavigation })]);
     await vi.runOnlyPendingTimersAsync();
 
     expect(useTaskStore.getState().tasks.find((item) => item.id === 'task-1')?.status).toBe('completed');
@@ -290,7 +344,7 @@ describe('task store date window behavior', () => {
 
   it('adds a task to the latest selected date without waiting for pending navigation load', async () => {
     vi.useFakeTimers();
-    const pendingNavigationLoad = deferred<Task[]>();
+    const pendingNavigationLoad = deferred<TaskOccurrence[]>();
     mocks.loadVisibleTasks.mockReturnValue(pendingNavigationLoad.promise);
     mocks.addTask.mockResolvedValue(baseTask({
       id: 'task-new',

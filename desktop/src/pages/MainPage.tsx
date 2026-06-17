@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { ArchivePanel } from '../components/ArchivePanel';
-import { RoutinePanel } from '../components/RoutinePanel';
 import { SettingsPanel } from '../components/SettingsPanel';
-import { TaskInput } from '../components/TaskInput';
+import { TaskInput, type TaskInputValue } from '../components/TaskInput';
 import { TaskItem } from '../components/TaskItem';
 import { TitleBar } from '../components/TitleBar';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -20,10 +19,10 @@ export function MainPage() {
   const setSelectedDate = useTaskStore((state) => state.setSelectedDate);
   const navigateDate = useTaskStore((state) => state.navigateDate);
   const addTask = useTaskStore((state) => state.addTask);
+  const updateTaskProgress = useTaskStore((state) => state.updateTaskProgress);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const loadTasks = useTaskStore((state) => state.loadTasks);
   const isArchiveOpen = useUiStore((state) => state.isArchiveOpen);
-  const isRoutineOpen = useUiStore((state) => state.isRoutineOpen);
   const isSettingsOpen = useUiStore((state) => state.isSettingsOpen);
   const selectedTasks = tasksByDate[selectedDate] ?? [];
   const activeTasks = selectedTasks.filter((task) => task.status === 'active');
@@ -39,16 +38,24 @@ export function MainPage() {
   }, [tasks]);
 
   useEffect(() => {
-    void loadTasks(settings.visibleDays);
-  }, [loadTasks, settings.visibleDays]);
+    void loadTasks(settings.visibleDays, undefined, undefined, settings.carryProgressForward);
+  }, [loadTasks, settings.visibleDays, settings.carryProgressForward]);
 
   async function selectAdjacentDate(direction: -1 | 1) {
-    await navigateDate(direction, settings.visibleDays);
+    await navigateDate(direction, settings.visibleDays, settings.carryProgressForward);
     setIsAdding(false);
   }
 
-  async function submitTask(title: string) {
-    await addTask({ title, taskDate: useTaskStore.getState().selectedDate });
+  async function submitTask(value: TaskInputValue) {
+    const task = await addTask({
+      title: value.title,
+      taskDate: value.taskDate || useTaskStore.getState().selectedDate,
+      sourceType: value.sourceType,
+      endDate: value.endDate,
+    });
+    if (value.progressPercent > 0) {
+      await updateTaskProgress(task.id, value.taskDate || useTaskStore.getState().selectedDate, value.progressPercent);
+    }
     setIsAdding(false);
   }
 
@@ -124,7 +131,7 @@ export function MainPage() {
       </section>
       <section className={`bottom-bar ${isAdding ? 'editing' : ''}`}>
         {isAdding ? (
-          <TaskInput selectedDate={selectedDate} onSubmit={(title) => void submitTask(title)} />
+          <TaskInput selectedDate={selectedDate} onSubmit={(value) => void submitTask(value)} />
         ) : (
           <button type="button" className="bottom-action add" onClick={() => setIsAdding(true)}>
             <Plus size={20} />
@@ -142,7 +149,6 @@ export function MainPage() {
         </button>
       </section>
       {isArchiveOpen && <ArchivePanel />}
-      {isRoutineOpen && <RoutinePanel />}
       {isSettingsOpen && <SettingsPanel />}
     </main>
   );

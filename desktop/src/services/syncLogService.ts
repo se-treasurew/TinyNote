@@ -1,7 +1,7 @@
 import { executeBackgroundWrite } from '../repositories/db';
 
 export type SyncOperation = 'create' | 'update' | 'delete' | 'import';
-export type SyncEntityType = 'task' | 'routine' | 'setting';
+export type SyncEntityType = 'task' | 'task_progress' | 'routine' | 'setting';
 
 export async function writeSyncLog(input: {
   entityType: SyncEntityType;

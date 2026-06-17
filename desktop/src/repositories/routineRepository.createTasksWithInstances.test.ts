@@ -24,9 +24,10 @@ const task = (id: string, date: string): Task => ({
   title: '阅读器PPT制作',
   content: null,
   taskDate: date,
+  endDate: null,
   status: 'active',
   priority: 'none',
-  sourceType: 'routine_daily',
+  sourceType: 'daily',
   routineId: 'routine-1',
   parentTaskId: null,
   sortOrder: 0,
@@ -55,7 +56,7 @@ describe('routine repository generated task insertion', () => {
     const insertedTaskIds: string[] = [];
     mocks.executeInTransaction.mockImplementation(async (_db: unknown, sql: string, bindValues?: unknown[]) => {
       if (sql.includes('INSERT INTO tasks')) {
-        if (bindValues?.[20] === '2026-06-18') {
+        if (bindValues?.[21] === '2026-06-18') {
           return { rowsAffected: 0 };
         }
         insertedTaskIds.push(String(bindValues?.[0]));

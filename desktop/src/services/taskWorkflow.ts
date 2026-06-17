@@ -1,6 +1,6 @@
-import type { Task, TasksByDate } from '../types/task';
+import type { Task } from '../types/task';
 
-export function applyComplete(task: Task, completeToArchive: boolean, now: string): Task {
+export function applyComplete<T extends Task>(task: T, completeToArchive: boolean, now: string): T {
   return bumpTask({
     ...task,
     status: completeToArchive ? 'archived' : 'completed',
@@ -10,7 +10,7 @@ export function applyComplete(task: Task, completeToArchive: boolean, now: strin
   });
 }
 
-export function applyArchive(task: Task, now: string): Task {
+export function applyArchive<T extends Task>(task: T, now: string): T {
   return bumpTask({
     ...task,
     status: 'archived',
@@ -19,7 +19,7 @@ export function applyArchive(task: Task, now: string): Task {
   });
 }
 
-export function applyRestore(task: Task, now: string): Task {
+export function applyRestore<T extends Task>(task: T, now: string): T {
   return bumpTask({
     ...task,
     status: 'active',
@@ -30,7 +30,7 @@ export function applyRestore(task: Task, now: string): Task {
   });
 }
 
-export function applyDelete(task: Task, now: string): Task {
+export function applyDelete<T extends Task>(task: T, now: string): T {
   return bumpTask({
     ...task,
     status: 'deleted',
@@ -39,22 +39,22 @@ export function applyDelete(task: Task, now: string): Task {
   });
 }
 
-export function groupActiveTasksByDate(tasks: Task[]): TasksByDate {
+export function groupActiveTasksByDate<T extends Task>(tasks: T[]): Record<string, T[]> {
   return tasks
     .filter((task) => task.status === 'active')
     .sort(sortByOrder)
-    .reduce<TasksByDate>((groups, task) => {
+    .reduce<Record<string, T[]>>((groups, task) => {
       groups[task.taskDate] = groups[task.taskDate] ?? [];
       groups[task.taskDate].push(task);
       return groups;
     }, {});
 }
 
-export function groupDateDisplayTasksByDate(tasks: Task[]): TasksByDate {
+export function groupDateDisplayTasksByDate<T extends Task>(tasks: T[]): Record<string, T[]> {
   return tasks
     .filter((task) => task.status === 'active' || task.status === 'completed' || task.status === 'archived')
     .sort((a, b) => statusWeight(a) - statusWeight(b) || sortByOrder(a, b))
-    .reduce<TasksByDate>((groups, task) => {
+    .reduce<Record<string, T[]>>((groups, task) => {
       groups[task.taskDate] = groups[task.taskDate] ?? [];
       groups[task.taskDate].push(task);
       return groups;
@@ -69,7 +69,7 @@ export function getActiveCountByDate(tasks: Task[], date: string): number {
   return tasks.filter((task) => task.taskDate === date && task.status === 'active').length;
 }
 
-function bumpTask(task: Task): Task {
+function bumpTask<T extends Task>(task: T): T {
   return {
     ...task,
     syncStatus: 'pending',

@@ -222,12 +222,13 @@ button {
 .task-input,
 .inline-add {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
   align-items: center;
   gap: 7px;
 }
 
 .task-input input,
+.task-input select,
 .inline-add input,
 .task-main input,
 .panel-form input,
@@ -245,6 +246,37 @@ button {
 .task-input input {
   height: 38px;
   padding: 0 12px;
+}
+
+.task-input-field {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.task-input-field span {
+  line-height: 1;
+}
+
+.task-input-field select,
+.task-input-field input {
+  height: 28px;
+  padding: 0 7px;
+  font-size: 12px;
+}
+
+.task-input-field.compact {
+  width: 64px;
+}
+
+.task-input-field.date {
+  width: 118px;
+}
+
+.task-input-field.progress {
+  width: 58px;
 }
 
 .task-input button {
@@ -422,6 +454,25 @@ button {
   background: var(--accent-soft);
 }
 
+.task-progress {
+  display: grid;
+  grid-template-columns: minmax(54px, 1fr) 34px;
+  align-items: center;
+  gap: 7px;
+  min-height: 18px;
+}
+
+.task-progress input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.task-progress span {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
 .task-main input,
 .inline-add input {
   width: 100%;
@@ -536,6 +587,11 @@ button {
 
 .bottom-bar.editing {
   gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+.bottom-bar.editing .bottom-action.clear {
+  display: none;
 }
 
 .bottom-action {

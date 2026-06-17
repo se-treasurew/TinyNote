@@ -2,7 +2,6 @@ import { Download, Image, RotateCcw, Trash2, Upload, X } from 'lucide-react';
 import { ChangeEvent, useState } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
-import { useRoutineStore } from '../stores/routineStore';
 import { useUiStore } from '../stores/uiStore';
 import { dataPortabilityService } from '../services/dataPortabilityService';
 import type { TinyNoteExport } from '../services/syncService';
@@ -18,7 +17,6 @@ export function SettingsPanel() {
   const resetWindow = useSettingsStore((state) => state.resetWindow);
   const loadSettings = useSettingsStore((state) => state.loadSettings);
   const loadTasks = useTaskStore((state) => state.loadTasks);
-  const loadRoutines = useRoutineStore((state) => state.loadRoutines);
   const closePanel = useUiStore((state) => state.closePanel);
 
   async function exportJson() {
@@ -38,7 +36,6 @@ export function SettingsPanel() {
     const payload = JSON.parse(text) as TinyNoteExport;
     await dataPortabilityService.importData(payload);
     await loadSettings();
-    await loadRoutines();
     await loadTasks();
   }
 
@@ -93,6 +90,14 @@ export function SettingsPanel() {
             type="checkbox"
             checked={settings.completeToArchive}
             onChange={(event) => void updateSetting('completeToArchive', event.target.checked)}
+          />
+        </label>
+        <label>
+          <span>进度顺延</span>
+          <input
+            type="checkbox"
+            checked={settings.carryProgressForward}
+            onChange={(event) => void updateSetting('carryProgressForward', event.target.checked)}
           />
         </label>
         <label>

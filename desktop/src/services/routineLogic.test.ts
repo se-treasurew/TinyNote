@@ -30,9 +30,10 @@ const existingTask = (date: string): Task => ({
   title: '喝水',
   content: null,
   taskDate: date,
+  endDate: null,
   status: 'active',
   priority: 'none',
-  sourceType: 'routine_daily',
+  sourceType: 'daily',
   routineId: 'routine-1',
   parentTaskId: null,
   sortOrder: 0,
@@ -56,7 +57,7 @@ describe('routine generation logic', () => {
     });
 
     expect(drafts.map((draft) => draft.taskDate)).toEqual(['2026-06-17', '2026-06-18']);
-    expect(drafts.every((draft) => draft.sourceType === 'routine_daily')).toBe(true);
+    expect(drafts.every((draft) => draft.sourceType === 'daily')).toBe(true);
   });
 
   it('does not duplicate an existing routine instance for the same date', () => {
