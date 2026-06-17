@@ -1,4 +1,4 @@
-import { Archive, Lock, Pin, PinOff, Settings, Unlock } from 'lucide-react';
+import { Archive, ListTodo, Lock, Pin, PinOff, Settings, Unlock } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUiStore } from '../stores/uiStore';
 import { windowService } from '../services/windowService';
@@ -21,6 +21,9 @@ export function TitleBar() {
         <span>v0.1.11</span>
       </div>
       <nav className="title-actions" onMouseDown={(event) => event.stopPropagation()}>
+        <button type="button" title="任务管理" aria-label="任务管理" onClick={() => openPanel('taskManage')}>
+          <ListTodo size={16} />
+        </button>
         <button type="button" title="归档" aria-label="归档" onClick={() => openPanel('archive')}>
           <Archive size={16} />
         </button>
@@ -28,7 +31,7 @@ export function TitleBar() {
           {settings.lockWindow ? <Lock size={16} /> : <Unlock size={16} />}
         </button>
         <button type="button" title="置顶" aria-label="置顶" onClick={() => void toggleTopmost()}>
-          {settings.alwaysOnTop ? <PinOff size={16} /> : <Pin size={16} />}
+          {settings.alwaysOnTop ? <Pin size={16} /> : <PinOff size={16} />}
         </button>
         <button type="button" title="设置" aria-label="设置" onClick={() => openPanel('settings')}>
           <Settings size={16} />

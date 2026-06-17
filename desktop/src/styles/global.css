@@ -296,7 +296,7 @@ button {
 
 .date-strip-wrap {
   display: grid;
-  grid-template-columns: 28px 1fr 28px;
+  grid-template-columns: 28px 1fr 28px auto;
   align-items: center;
   min-height: 70px;
   padding: 7px 12px 9px;
@@ -323,6 +323,29 @@ button {
 .date-arrow:not(:disabled):hover {
   color: var(--text);
   background: var(--accent-soft);
+}
+
+.date-today {
+  display: inline-grid;
+  place-items: center;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.date-today:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.date-today.is-today {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .date-strip {
@@ -611,7 +634,7 @@ button {
 
 .bottom-bar.editing {
   gap: 10px;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr auto;
 }
 
 .bottom-bar.editing .bottom-action.clear {
@@ -642,6 +665,14 @@ button {
   color: var(--muted);
   font-size: 16px;
   font-weight: 600;
+}
+
+.bottom-action.cancel {
+  color: var(--muted);
+}
+
+.bottom-action.cancel:hover {
+  color: var(--danger);
 }
 
 .bottom-action:not(:disabled):hover {
@@ -700,6 +731,16 @@ button {
 .settings-grid {
   display: grid;
   gap: 9px;
+}
+
+.panel-form-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.panel-form-actions button.ghost {
+  background: transparent;
+  color: var(--muted);
 }
 
 .panel-form input {

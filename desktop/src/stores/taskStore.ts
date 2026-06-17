@@ -33,6 +33,7 @@ interface TaskState {
   ) => Promise<void>;
   loadArchive: () => Promise<void>;
   navigateDate: (direction: -1 | 1, visibleDays?: number, carryProgressForward?: boolean) => Promise<void>;
+  goToToday: (visibleDays?: number, carryProgressForward?: boolean) => Promise<void>;
   addTask: (input: CreateTaskInput) => Promise<TaskOccurrence>;
   updateTask: (id: string, input: UpdateTaskInput) => Promise<void>;
   updateTaskProgress: (id: string, progressDate: string, percent: number) => Promise<void>;
@@ -163,6 +164,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     scheduleNavigationLoad(async () => {
       await get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate, carryProgressForward);
     });
+  },
+
+  async goToToday(visibleDays = get().visibleDays, carryProgressForward = get().carryProgressForward) {
+    const today = todayIsoDate();
+    const startDate = resolveVisibleStartForDate(today, get().visibleStartDate, visibleDays);
+    await get().loadTasks(visibleDays, startDate, today, carryProgressForward);
   },
 
   async addTask(input) {

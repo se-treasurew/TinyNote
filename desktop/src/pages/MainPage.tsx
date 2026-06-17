@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
 import { ArchivePanel } from '../components/ArchivePanel';
 import { SettingsPanel } from '../components/SettingsPanel';
+import { TaskManagePanel } from '../components/TaskManagePanel';
 import { TaskInput, type TaskInputValue } from '../components/TaskInput';
 import { TaskItem } from '../components/TaskItem';
 import { TitleBar } from '../components/TitleBar';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
+import { todayIsoDate } from '../utils/date';
 import { useUiStore } from '../stores/uiStore';
 
 export function MainPage() {
@@ -18,12 +20,14 @@ export function MainPage() {
   const selectedDate = useTaskStore((state) => state.selectedDate);
   const setSelectedDate = useTaskStore((state) => state.setSelectedDate);
   const navigateDate = useTaskStore((state) => state.navigateDate);
+  const goToToday = useTaskStore((state) => state.goToToday);
   const addTask = useTaskStore((state) => state.addTask);
   const updateTaskProgress = useTaskStore((state) => state.updateTaskProgress);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const loadTasks = useTaskStore((state) => state.loadTasks);
   const isArchiveOpen = useUiStore((state) => state.isArchiveOpen);
   const isSettingsOpen = useUiStore((state) => state.isSettingsOpen);
+  const isTaskManageOpen = useUiStore((state) => state.isTaskManageOpen);
   const selectedTasks = tasksByDate[selectedDate] ?? [];
   const activeTasks = selectedTasks.filter((task) => task.status === 'active');
   const doneTasks = selectedTasks.filter((task) => task.status === 'completed' || task.status === 'archived');
@@ -107,6 +111,14 @@ export function MainPage() {
         >
           <ChevronRight size={18} />
         </button>
+        <button
+          type="button"
+          className={`date-today ${selectedDate === todayIsoDate() ? 'is-today' : ''}`}
+          aria-label="回到今天"
+          onClick={() => void goToToday(settings.visibleDays, settings.carryProgressForward)}
+        >
+          今天
+        </button>
       </section>
       <section className="task-board" aria-label={`${selectedDate} 任务`}>
         <div className="task-list active-list" role="list" aria-label="未完成任务">
@@ -131,7 +143,12 @@ export function MainPage() {
       </section>
       <section className={`bottom-bar ${isAdding ? 'editing' : ''}`}>
         {isAdding ? (
-          <TaskInput selectedDate={selectedDate} onSubmit={(value) => void submitTask(value)} />
+          <>
+            <TaskInput selectedDate={selectedDate} onSubmit={(value) => void submitTask(value)} />
+            <button type="button" className="bottom-action cancel" aria-label="取消" onClick={() => setIsAdding(false)}>
+              <X size={18} />
+            </button>
+          </>
         ) : (
           <button type="button" className="bottom-action add" onClick={() => setIsAdding(true)}>
             <Plus size={20} />
@@ -150,6 +167,7 @@ export function MainPage() {
       </section>
       {isArchiveOpen && <ArchivePanel />}
       {isSettingsOpen && <SettingsPanel />}
+      {isTaskManageOpen && <TaskManagePanel />}
     </main>
   );
 }
