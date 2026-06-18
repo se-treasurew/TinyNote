@@ -22,6 +22,9 @@ export function TaskManagePanel() {
   const [newTitle, setNewTitle] = useState('');
   const [newStartDate, setNewStartDate] = useState(todayIsoDate());
   const [newEndDate, setNewEndDate] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  const modeCopy = getTaskModeCopy(mode);
 
   async function refresh() {
     const all = await taskService.loadAll();
@@ -67,18 +70,23 @@ export function TaskManagePanel() {
   async function handleCreate() {
     const title = newTitle.trim();
     if (!title) return;
-    await addTask({
-      title,
-      taskDate: newStartDate,
-      sourceType: mode,
-      endDate: newEndDate || null,
-    });
-    setNewTitle('');
-    setNewStartDate(todayIsoDate());
-    setNewEndDate('');
-    setIsAdding(false);
-    await refresh();
-    await loadTasks();
+    setIsCreating(true);
+    try {
+      await addTask({
+        title,
+        taskDate: newStartDate,
+        sourceType: mode,
+        endDate: newEndDate || null,
+      });
+      setNewTitle('');
+      setNewStartDate(todayIsoDate());
+      setNewEndDate('');
+      setIsAdding(false);
+      await refresh();
+      await loadTasks();
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   function cancelAdd() {
@@ -86,10 +94,11 @@ export function TaskManagePanel() {
     setNewStartDate(todayIsoDate());
     setNewEndDate('');
     setIsAdding(false);
+    setIsCreating(false);
   }
 
   return (
-    <aside className="panel">
+    <aside className="panel task-manage-panel">
       <header className="panel-header">
         <strong>任务管理</strong>
         <button type="button" aria-label="关闭" onClick={closePanel}>
@@ -113,30 +122,45 @@ export function TaskManagePanel() {
         </button>
       </div>
       {isAdding ? (
-        <div className="panel-form">
-          <input
-            autoFocus
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleCreate();
-              if (e.key === 'Escape') cancelAdd();
-            }}
-            placeholder={mode === 'daily' ? '新建每日任务' : '新建多日任务'}
-          />
+        <div className="panel-form panel-form-card">
+          <div className="panel-form-title">
+            <h2>{modeCopy.newLabel}</h2>
+            <span>{modeCopy.formHint}</span>
+          </div>
+          <label className="field-label">
+            <span>任务名称</span>
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleCreate();
+                if (e.key === 'Escape') cancelAdd();
+              }}
+              placeholder="任务名称"
+            />
+          </label>
           <div className="date-pair">
-            <input type="date" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} />
-            <input type="date" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} />
+            <label className="field-label">
+              <span>开始日期</span>
+              <input type="date" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} />
+            </label>
+            <label className="field-label">
+              <span>{modeCopy.endDateLabel}</span>
+              <input type="date" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} />
+            </label>
           </div>
           <div className="panel-form-actions">
-            <button type="button" onClick={() => void handleCreate()}>创建</button>
+            <button type="button" disabled={isCreating || !newTitle.trim()} onClick={() => void handleCreate()}>
+              {isCreating ? '创建中...' : modeCopy.createLabel}
+            </button>
             <button type="button" className="ghost" onClick={cancelAdd}>取消</button>
           </div>
         </div>
       ) : (
-        <button type="button" className="ghost-row-button" onClick={() => setIsAdding(true)}>
+        <button type="button" className="ghost-row-button" aria-label={modeCopy.newLabel} onClick={() => setIsAdding(true)}>
           <Plus size={15} />
-          <span>新建{mode === 'daily' ? '每日' : '多日'}任务</span>
+          <span>{modeCopy.newLabel}</span>
         </button>
       )}
       <div className="panel-list">
@@ -173,8 +197,32 @@ export function TaskManagePanel() {
             )}
           </div>
         ))}
-        {filtered.length === 0 && <p className="empty-copy">{mode === 'daily' ? '还没有每日任务' : '还没有多日任务'}</p>}
+        {filtered.length === 0 && (
+          <div className="panel-empty-state">
+            <p>{modeCopy.emptyText}</p>
+          </div>
+        )}
       </div>
     </aside>
   );
+}
+
+function getTaskModeCopy(mode: TaskSourceType) {
+  if (mode === 'multi_day') {
+    return {
+      newLabel: '新建多日任务',
+      createLabel: '创建多日任务',
+      endDateLabel: '结束日期',
+      formHint: '适合一段时间内持续推进的任务',
+      emptyText: '还没有多日任务，先创建一个需要连续推进的事项',
+    };
+  }
+
+  return {
+    newLabel: '新建每日任务',
+    createLabel: '创建每日任务',
+    endDateLabel: '结束日期（可选）',
+    formHint: '适合每天都会出现的小事项',
+    emptyText: '还没有每日任务，先创建一个每天都会出现的小事项',
+  };
 }

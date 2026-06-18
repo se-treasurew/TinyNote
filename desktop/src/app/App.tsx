@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
 import { initializeDatabase } from '../repositories/db';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
@@ -22,6 +23,11 @@ export function App() {
 
     async function boot() {
       try {
+        if (!isTauri()) {
+          setStartupError('请在 Tauri 桌面应用中打开 TinyNote，普通浏览器无法访问本地 SQLite 和窗口能力。');
+          return;
+        }
+
         await initializeDatabase();
         const settings = await loadSettings();
         await loadTasks(settings.visibleDays, undefined, undefined, settings.carryProgressForward);
