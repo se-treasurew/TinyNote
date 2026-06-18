@@ -69,10 +69,10 @@
   color: #64748b;
 }
 
-:root[data-theme='glass-white'] .tag-overdue,
-:root[data-theme='light'] .tag-overdue {
-  background: rgba(225, 29, 72, 0.12) !important;
-  color: #e11d48;
+:root[data-theme='glass-white'] .tag-postponed,
+:root[data-theme='light'] .tag-postponed {
+  background: rgba(124, 58, 237, 0.12) !important;
+  color: #7c3aed;
 }
 
 :root[data-theme='glass-mint'] {
@@ -552,9 +552,9 @@ button {
   color: #94a3b8;
 }
 
-.tag-overdue {
-  background: rgba(251, 113, 133, 0.18) !important;
-  color: #fb7185;
+.tag-postponed {
+  background: rgba(196, 181, 253, 0.18) !important;
+  color: #c4b5fd;
 }
 
 .task-progress {
@@ -590,13 +590,21 @@ button {
   position: relative;
 }
 
-.task-menu summary {
-  list-style: none;
+.task-menu > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
   color: color-mix(in srgb, var(--text) 46%, transparent);
 }
 
-.task-menu summary::-webkit-details-marker {
-  display: none;
+.task-menu > button:hover {
+  color: var(--accent);
+  background: var(--panel);
 }
 
 .task-menu-popover {
@@ -605,7 +613,7 @@ button {
   z-index: 4;
   display: grid;
   gap: 5px;
-  width: 168px;
+  width: min(260px, calc(100vw - 28px));
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -621,14 +629,196 @@ button {
   gap: 7px;
   min-height: 30px;
   border: 0;
+  border-radius: 7px;
   background: transparent;
   color: var(--text);
   text-align: left;
 }
 
-.task-menu-popover input {
+.task-menu-postpone-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(118px, 1fr) 32px;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding-bottom: 4px;
+  color: var(--text);
+}
+
+.task-menu-postpone-row .task-menu-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 30px;
+  padding: 0;
+  border-radius: 7px;
+  background: var(--accent);
+  color: white;
+}
+
+.task-menu-popover button {
+  cursor: pointer;
+}
+
+.task-menu-popover button:disabled {
+  opacity: 0.44;
+  cursor: default;
+}
+
+.task-menu-popover button:not(:disabled):hover {
+  color: var(--accent);
+}
+
+.task-menu-popover .task-menu-icon-button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 84%, white);
+  color: white;
+}
+
+.task-menu-popover label.task-type-field {
+  grid-template-columns: auto 1fr;
+}
+
+.task-menu-popover input,
+.task-menu-popover select,
+.task-detail-schedule-fields input,
+.task-detail-schedule-fields select {
   width: 100%;
   height: 28px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.task-menu-postpone-row input {
+  min-width: 118px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.task-menu-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.task-menu-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: white;
+}
+
+.task-menu-actions button.ghost {
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.task-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.task-detail-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(360px, 100%);
+  max-height: min(640px, calc(100vh - 36px));
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+
+.task-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-detail-header button,
+.task-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.task-detail-header button {
+  width: 30px;
+}
+
+.task-detail-body,
+.task-detail-title,
+.task-detail-grid,
+.task-detail-history,
+.task-detail-schedule,
+.task-detail-schedule-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.task-detail-title strong {
+  font-size: 15px;
+}
+
+.task-detail-title span,
+.task-detail-grid,
+.task-detail-history span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.task-detail-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.task-detail-history {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.task-detail-history strong {
+  font-size: 12px;
+}
+
+.task-detail-schedule {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.task-detail-schedule-fields label {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+}
+
+.task-detail-schedule-fields label.task-type-field {
+  grid-template-columns: auto 1fr;
 }
 
 .ghost-row-button {
@@ -682,7 +872,7 @@ button {
 
 .bottom-bar {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   align-items: center;
   min-height: 54px;
   padding: 7px 18px;
@@ -696,6 +886,7 @@ button {
   grid-template-columns: 1fr auto auto;
 }
 
+.bottom-bar.editing .bottom-action.postpone,
 .bottom-bar.editing .bottom-action.clear {
   display: none;
 }
@@ -743,6 +934,13 @@ button {
   justify-self: end;
   color: var(--muted);
   font-size: 16px;
+  font-weight: 600;
+}
+
+.bottom-action.postpone {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -853,6 +1051,13 @@ button {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.panel-form-actions button {
+  min-width: 68px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .panel-form-actions button.ghost {
@@ -902,8 +1107,18 @@ button {
   background: color-mix(in srgb, var(--panel) 84%, transparent);
 }
 
-.archive-row div,
-.routine-row div {
+.routine-row.editing {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.panel-edit-form {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.archive-row > div,
+.routine-row > div {
   display: grid;
   min-width: 0;
 }
@@ -932,6 +1147,20 @@ button {
   font-size: 12px;
   line-height: 1.55;
   text-align: center;
+}
+
+@media (max-width: 420px) {
+  .date-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-form-actions {
+    justify-content: stretch;
+  }
+
+  .panel-form-actions button {
+    flex: 1;
+  }
 }
 
 .settings-grid label,

@@ -1,25 +1,30 @@
 import { TaskRepository } from '../repositories/taskRepository';
-import type { CreateTaskInput, Task, TaskDraft, TaskOccurrence, TaskProgressEntry, UpdateTaskInput } from '../types/task';
+import type { CreateTaskInput, Task, TaskDraft, TaskOccurrence, TaskPostponement, TaskProgressEntry, UpdateTaskInput } from '../types/task';
 import { getVisibleDateRange } from '../utils/date';
 import { getDeviceId, createId } from '../utils/id';
 import { normalizeTitle } from '../utils/format';
 import { applyArchive, applyComplete, applyDelete, applyRestore, groupActiveTasksByDate } from './taskWorkflow';
 import { writeSyncLog } from './syncLogService';
 import { buildTaskOccurrences, clampProgressPercent } from './taskOccurrence';
+import { isPostponeEligibleTask } from './taskScheduling';
 
 const taskRepository = new TaskRepository();
 
 export class TaskService {
-  async loadVisibleTasks(startDate: string, visibleDays: number, carryProgressForward = false): Promise<TaskOccurrence[]> {
+  async loadVisibleTasks(startDate: string, visibleDays: number): Promise<TaskOccurrence[]> {
     const dates = getVisibleDateRange(startDate, visibleDays);
     const endDate = dates[dates.length - 1] ?? startDate;
     const tasks = await taskRepository.listByDateRange(startDate, endDate);
-    const progressEntries = await taskRepository.listProgressEntries(tasks.map((task) => task.id), endDate);
+    const taskIds = tasks.map((task) => task.id);
+    const [progressEntries, postponements] = await Promise.all([
+      taskRepository.listProgressEntries(taskIds, endDate),
+      taskRepository.listPostponements(taskIds),
+    ]);
     return buildTaskOccurrences({
       tasks,
       progressEntries,
+      postponements,
       visibleDates: dates,
-      carryProgressForward,
     });
   }
 
@@ -47,7 +52,7 @@ export class TaskService {
 
     await taskRepository.insert(task);
     await writeSyncLog({ entityType: 'task', entityId: task.id, operation: 'create', payload: task });
-    return taskToOccurrence(task, input.taskDate, []);
+    return taskToOccurrence(task, input.taskDate, [], []);
   }
 
   async insertGeneratedTasks(drafts: TaskDraft[]): Promise<Task[]> {
@@ -72,6 +77,8 @@ export class TaskService {
       content: input.content === undefined ? task.content : input.content,
       taskDate: input.taskDate ?? task.taskDate,
       endDate: input.endDate === undefined ? task.endDate : input.endDate,
+      sourceType: input.sourceType ?? task.sourceType,
+      postponedAt: input.postponedAt === undefined ? task.postponedAt : input.postponedAt,
       sortOrder: input.sortOrder ?? task.sortOrder,
       updatedAt: now,
       syncStatus: 'pending',
@@ -80,18 +87,20 @@ export class TaskService {
 
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return taskToOccurrence(updated, input.taskDate ?? updated.taskDate, []);
+    return taskToOccurrence(updated, input.taskDate ?? updated.taskDate, [], []);
   }
 
   async updateTaskProgress(
     id: string,
     progressDate: string,
     percent: number,
-    carryProgressForward = false,
   ): Promise<TaskOccurrence> {
     const task = await this.requireTask(id);
     const now = new Date().toISOString();
-    const existing = await taskRepository.findProgressEntry(id, progressDate);
+    const [existing, postponements] = await Promise.all([
+      taskRepository.findProgressEntry(id, progressDate),
+      taskRepository.listPostponements([id]),
+    ]);
     const entry = createProgressEntry({
       existing,
       taskId: id,
@@ -103,7 +112,59 @@ export class TaskService {
 
     await taskRepository.upsertProgressEntry(entry);
     await writeSyncLog({ entityType: 'task_progress', entityId: entry.id, operation: 'update', payload: entry });
-    return taskToOccurrence(task, progressDate, [entry], carryProgressForward);
+    return taskToOccurrence(task, progressDate, [entry], postponements);
+  }
+
+  async postponeTask(id: string, fromDate: string, toDate: string, sourceProgressPercent?: number): Promise<TaskOccurrence> {
+    const task = await this.requireTask(id);
+    if (!isPostponeEligibleTask(task, fromDate)) {
+      throw new Error('Task cannot be postponed');
+    }
+
+    if (toDate <= fromDate) {
+      throw new Error('Postpone target date must be after source date');
+    }
+
+    const currentEntry = await this.resolveProgressForPostponement(task, fromDate);
+    if (currentEntry && currentEntry.status !== 'active') {
+      throw new Error('Task cannot be postponed');
+    }
+
+    const now = new Date().toISOString();
+    const updated: Task = {
+      ...task,
+      endDate: task.sourceType === 'multi_day' && (!task.endDate || toDate > task.endDate) ? toDate : task.endDate,
+      postponedAt: now,
+      updatedAt: now,
+      syncStatus: 'pending',
+      version: task.version + 1,
+    };
+    const postponement = createPostponement({
+      taskId: id,
+      fromDate,
+      toDate,
+      now,
+    });
+
+    await taskRepository.save(updated);
+    await taskRepository.upsertPostponement(postponement);
+    await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
+    await writeSyncLog({ entityType: 'task_postponement', entityId: postponement.id, operation: 'create', payload: postponement });
+
+    const sourcePercent = currentEntry?.percent ?? clampProgressPercent(sourceProgressPercent ?? 0);
+    const existingNextEntry = await taskRepository.findProgressEntry(id, toDate);
+    const nextEntry = createProgressEntry({
+      existing: existingNextEntry,
+      taskId: id,
+      progressDate: toDate,
+      percent: sourcePercent,
+      status: 'active',
+      now,
+    });
+    await taskRepository.upsertProgressEntry(nextEntry);
+    await writeSyncLog({ entityType: 'task_progress', entityId: nextEntry.id, operation: 'update', payload: nextEntry });
+
+    return taskToOccurrence(updated, toDate, [nextEntry], [postponement]);
   }
 
   async completeTask(id: string, completeToArchive: boolean, occurrenceDate?: string): Promise<TaskOccurrence> {
@@ -115,7 +176,7 @@ export class TaskService {
     const updated = applyComplete(task, completeToArchive, new Date().toISOString());
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return taskToOccurrence(updated, occurrenceDate ?? updated.taskDate, []);
+    return taskToOccurrence(updated, occurrenceDate ?? updated.taskDate, [], []);
   }
 
   async archiveTask(id: string): Promise<TaskOccurrence> {
@@ -123,7 +184,7 @@ export class TaskService {
     const updated = applyArchive(task, new Date().toISOString());
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return taskToOccurrence(updated, updated.taskDate, []);
+    return taskToOccurrence(updated, updated.taskDate, [], []);
   }
 
   async restoreTask(id: string, occurrenceDate?: string): Promise<TaskOccurrence> {
@@ -135,7 +196,7 @@ export class TaskService {
     const updated = applyRestore(task, new Date().toISOString());
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return taskToOccurrence(updated, occurrenceDate ?? updated.taskDate, []);
+    return taskToOccurrence(updated, occurrenceDate ?? updated.taskDate, [], []);
   }
 
   async deleteTask(id: string): Promise<TaskOccurrence> {
@@ -143,7 +204,7 @@ export class TaskService {
     const updated = applyDelete(task, new Date().toISOString());
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'delete', payload: updated });
-    return taskToOccurrence(updated, updated.taskDate, []);
+    return taskToOccurrence(updated, updated.taskDate, [], []);
   }
 
   groupActiveTasks(tasks: Task[]) {
@@ -176,7 +237,19 @@ export class TaskService {
 
     await taskRepository.upsertProgressEntry(entry);
     await writeSyncLog({ entityType: 'task_progress', entityId: entry.id, operation: 'update', payload: entry });
-    return taskToOccurrence(task, progressDate, [entry]);
+    return taskToOccurrence(task, progressDate, [entry], []);
+  }
+
+  private async resolveProgressForPostponement(task: Task, fromDate: string): Promise<TaskProgressEntry | null> {
+    const directEntry = await taskRepository.findProgressEntry(task.id, fromDate);
+    if (directEntry || task.sourceType !== 'multi_day') {
+      return directEntry;
+    }
+
+    const entries = await taskRepository.listProgressEntries([task.id], fromDate);
+    return entries
+      .filter((entry) => entry.progressDate <= fromDate)
+      .sort((a, b) => b.progressDate.localeCompare(a.progressDate) || b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
   }
 }
 
@@ -210,6 +283,7 @@ function createTask(input: {
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
+    postponedAt: null,
     createdAt: input.now,
     updatedAt: input.now,
     syncStatus: 'local',
@@ -241,23 +315,51 @@ function createProgressEntry(input: {
   };
 }
 
+function createPostponement(input: {
+  taskId: string;
+  fromDate: string;
+  toDate: string;
+  now: string;
+}): TaskPostponement {
+  return {
+    id: createId('postpone'),
+    taskId: input.taskId,
+    fromDate: input.fromDate,
+    toDate: input.toDate,
+    createdAt: input.now,
+    updatedAt: input.now,
+    deletedAt: null,
+    syncStatus: 'pending',
+    version: 1,
+  };
+}
+
 function taskToOccurrence(
   task: Task,
   occurrenceDate: string,
   progressEntries: TaskProgressEntry[],
-  carryProgressForward = false,
+  postponements: TaskPostponement[],
 ): TaskOccurrence {
+  const directEntry = progressEntries.find((entry) => entry.progressDate === occurrenceDate);
   return buildTaskOccurrences({
     tasks: [task],
     progressEntries,
+    postponements,
     visibleDates: [occurrenceDate],
-    carryProgressForward,
   })[0] ?? {
     ...task,
     taskDate: occurrenceDate,
     definitionTaskDate: task.taskDate,
     occurrenceDate,
-    progressPercent: 0,
-    progressEntryId: null,
+    progressPercent: clampProgressPercent(directEntry?.percent ?? 0),
+    progressEntryId: directEntry?.id ?? null,
+    postponementId: null,
+    postponedFromDate: null,
+    postponedToDate: null,
+    postponementHistory: postponements,
+    status: directEntry?.status ?? task.status,
+    completedAt: directEntry?.completedAt ?? task.completedAt,
+    archivedAt: directEntry?.archivedAt ?? task.archivedAt,
+    deletedAt: directEntry?.deletedAt ?? task.deletedAt,
   };
 }

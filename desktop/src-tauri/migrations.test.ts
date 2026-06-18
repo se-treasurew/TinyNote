@@ -39,4 +39,21 @@ describe('Tauri SQL migrations', () => {
     expect(migration).toContain('DELETE FROM routine_instances');
     expect(migration).toContain('DELETE FROM routines');
   });
+
+  it('adds explicit postpone metadata in migration 4', () => {
+    const libRs = readFileSync(resolve(process.cwd(), 'src-tauri/src/lib.rs'), 'utf8');
+    const migration = migrationSql(libRs, 4);
+
+    expect(migration).toContain('ALTER TABLE tasks ADD COLUMN postponed_at TEXT');
+  });
+
+  it('adds task postponement history in migration 5', () => {
+    const libRs = readFileSync(resolve(process.cwd(), 'src-tauri/src/lib.rs'), 'utf8');
+    const migration = migrationSql(libRs, 5);
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS task_postponements');
+    expect(migration).toContain('from_date TEXT NOT NULL');
+    expect(migration).toContain('to_date TEXT NOT NULL');
+    expect(migration).toContain('CREATE INDEX IF NOT EXISTS idx_task_postponements_task_id');
+  });
 });

@@ -30,7 +30,7 @@ export function App() {
 
         await initializeDatabase();
         const settings = await loadSettings();
-        await loadTasks(settings.visibleDays, undefined, undefined, settings.carryProgressForward);
+        await loadTasks(settings.visibleDays);
         if (settings.startMinimizedToTray || !settings.showOnStartup) {
           await trayService.hideWindow();
         }

@@ -93,14 +93,6 @@ export function SettingsPanel() {
           />
         </label>
         <label>
-          <span>进度顺延</span>
-          <input
-            type="checkbox"
-            checked={settings.carryProgressForward}
-            onChange={(event) => void updateSetting('carryProgressForward', event.target.checked)}
-          />
-        </label>
-        <label>
           <span>开机启动</span>
           <input
             type="checkbox"

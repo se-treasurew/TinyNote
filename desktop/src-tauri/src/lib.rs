@@ -209,5 +209,34 @@ fn migrations() -> Vec<Migration> {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "add_task_postpone_metadata",
+            sql: r#"
+            ALTER TABLE tasks ADD COLUMN postponed_at TEXT;
+        "#,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "add_task_postponement_history",
+            sql: r#"
+            CREATE TABLE IF NOT EXISTS task_postponements (
+              id TEXT PRIMARY KEY,
+              task_id TEXT NOT NULL,
+              from_date TEXT NOT NULL,
+              to_date TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              deleted_at TEXT,
+              sync_status TEXT NOT NULL DEFAULT 'local',
+              version INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_task_postponements_task_id ON task_postponements(task_id);
+            CREATE INDEX IF NOT EXISTS idx_task_postponements_dates ON task_postponements(from_date, to_date);
+        "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

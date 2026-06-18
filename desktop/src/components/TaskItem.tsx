@@ -1,8 +1,10 @@
-import { Archive, CalendarDays, Check, MoreHorizontal, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import type { TaskOccurrence } from '../types/task';
+import { Archive, CalendarClock, CalendarDays, Check, Info, MoreHorizontal, Save, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { TaskOccurrence, TaskSourceType } from '../types/task';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
+import { addDays } from '../utils/date';
+import { isPostponeEligibleTask } from '../services/taskScheduling';
 
 interface TaskItemProps {
   task: TaskOccurrence;
@@ -10,23 +12,90 @@ interface TaskItemProps {
 
 export function TaskItem({ task }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [title, setTitle] = useState(task.title);
-  const [date, setDate] = useState(task.taskDate);
+  const [draftSourceType, setDraftSourceType] = useState<TaskSourceType>(task.sourceType);
+  const [draftStartDate, setDraftStartDate] = useState(task.definitionTaskDate);
+  const [draftEndDate, setDraftEndDate] = useState(task.endDate ?? addDays(task.definitionTaskDate, 1));
+  const [postponeToDate, setPostponeToDate] = useState(addDays(task.occurrenceDate, 1));
   const [progress, setProgress] = useState(task.progressPercent);
+  const menuRef = useRef<HTMLDivElement>(null);
   const settings = useSettingsStore((state) => state.settings);
   const completeTask = useTaskStore((state) => state.completeTask);
   const updateTask = useTaskStore((state) => state.updateTask);
   const updateTaskProgress = useTaskStore((state) => state.updateTaskProgress);
+  const postponeTask = useTaskStore((state) => state.postponeTask);
   const archiveTask = useTaskStore((state) => state.archiveTask);
   const restoreTask = useTaskStore((state) => state.restoreTask);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const isDone = task.status === 'completed' || task.status === 'archived';
+  const canPostpone = isPostponeEligibleTask(task, task.occurrenceDate) && postponeToDate > task.occurrenceDate;
+  const postponeButtonLabel = `确认延期到 ${postponeToDate}`;
+  const scheduleEndDate = draftSourceType === 'manual' ? null : draftEndDate;
+  const canSaveSchedule =
+    Boolean(draftStartDate) &&
+    (draftSourceType === 'manual' || Boolean(draftEndDate && draftEndDate >= draftStartDate));
 
   useEffect(() => {
-    setTitle(task.title);
-    setDate(task.taskDate);
+    resetDrafts();
     setProgress(task.progressPercent);
-  }, [task.id, task.taskDate, task.progressPercent, task.title]);
+  }, [task.definitionTaskDate, task.endDate, task.id, task.occurrenceDate, task.progressPercent, task.sourceType, task.title]);
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return undefined;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (menuRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      closeMenu();
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMenuOpen]);
+
+  function resetDrafts() {
+    setTitle(task.title);
+    setDraftSourceType(task.sourceType);
+    setDraftStartDate(task.definitionTaskDate);
+    setDraftEndDate(task.endDate ?? addDays(task.definitionTaskDate, 1));
+    setPostponeToDate(addDays(task.occurrenceDate, 1));
+  }
+
+  function openMenu() {
+    resetDrafts();
+    setIsMenuOpen(true);
+  }
+
+  function closeMenu() {
+    resetDrafts();
+    setIsMenuOpen(false);
+  }
+
+  function openDetails() {
+    resetDrafts();
+    setIsMenuOpen(false);
+    setIsDetailOpen(true);
+  }
+
+  function closeDetails() {
+    resetDrafts();
+    setIsDetailOpen(false);
+  }
 
   async function saveTitle() {
     const next = title.trim();
@@ -36,16 +105,30 @@ export function TaskItem({ task }: TaskItemProps) {
     }
   }
 
-  async function saveDate(nextDate: string) {
-    setDate(nextDate);
-    if (nextDate !== task.taskDate) {
-      await updateTask(task.id, { taskDate: nextDate });
+  async function saveSchedule() {
+    if (!canSaveSchedule) {
+      return;
+    }
+
+    await updateTask(task.id, {
+      sourceType: draftSourceType,
+      taskDate: draftStartDate,
+      endDate: scheduleEndDate,
+    });
+    setIsMenuOpen(false);
+    setIsDetailOpen(false);
+  }
+
+  function updateDraftSourceType(nextSourceType: TaskSourceType) {
+    setDraftSourceType(nextSourceType);
+    if (nextSourceType !== 'manual' && !draftEndDate) {
+      setDraftEndDate(addDays(draftStartDate, 1));
     }
   }
 
   async function saveProgress(nextProgress: number) {
     setProgress(nextProgress);
-    await updateTaskProgress(task.id, task.taskDate, nextProgress);
+    await updateTaskProgress(task.id, task.occurrenceDate, nextProgress);
   }
 
   async function toggleCompleted() {
@@ -57,8 +140,24 @@ export function TaskItem({ task }: TaskItemProps) {
     await completeTask(task.id, settings.completeToArchive);
   }
 
+  async function postpone() {
+    if (!canPostpone) {
+      return;
+    }
+
+    await postponeTask(task.id, task.occurrenceDate, postponeToDate, progress);
+    setIsMenuOpen(false);
+  }
+
   return (
-    <div className={`task-item ${isDone ? 'completed' : ''}`} role="listitem">
+    <div
+      className={`task-item ${isDone ? 'completed' : ''}`}
+      role="listitem"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        openMenu();
+      }}
+    >
       <button
         type="button"
         className={`check-button ${isDone ? 'completed' : ''}`}
@@ -93,7 +192,7 @@ export function TaskItem({ task }: TaskItemProps) {
             {task.sourceType === 'daily' && <span className="tag-daily">每日</span>}
             {task.sourceType === 'multi_day' && <span className="tag-multi">长期</span>}
             {task.status === 'archived' && <span className="tag-archived">归档</span>}
-            {task.taskDate < new Date().toISOString().slice(0, 10) && <span className="tag-overdue">过期</span>}
+            {task.postponedAt && <span className="tag-postponed">延期</span>}
           </div>
           {task.status === 'active' && (
             <div className="task-progress">
@@ -110,27 +209,223 @@ export function TaskItem({ task }: TaskItemProps) {
           )}
         </div>
       </div>
-      <details className="task-menu">
-        <summary aria-label="更多">
+      <div className="task-menu" ref={menuRef}>
+        <button type="button" aria-label="更多" onClick={() => (isMenuOpen ? closeMenu() : openMenu())}>
           <MoreHorizontal size={16} />
-        </summary>
-        <div className="task-menu-popover">
-          <label>
-            <CalendarDays size={14} />
-            <input type="date" value={date} onChange={(event) => void saveDate(event.target.value)} />
-          </label>
-          {task.status !== 'archived' && (
-            <button type="button" onClick={() => void archiveTask(task.id)}>
-              <Archive size={14} />
-              <span>归档</span>
+        </button>
+        {isMenuOpen && (
+          <div className="task-menu-popover">
+            {isPostponeEligibleTask(task, task.occurrenceDate) && (
+              <>
+                <div className="task-menu-postpone-row">
+                  <CalendarClock size={14} />
+                  <span>延期到</span>
+                  <input
+                    aria-label="延期日期"
+                    type="date"
+                    value={postponeToDate}
+                    onChange={(event) => setPostponeToDate(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="task-menu-icon-button"
+                    aria-label={postponeButtonLabel}
+                    title={postponeButtonLabel}
+                    disabled={!canPostpone}
+                    onClick={() => void postpone()}
+                  >
+                    <Check size={14} />
+                  </button>
+                </div>
+              </>
+            )}
+            <button type="button" onClick={openDetails}>
+              <Info size={14} />
+              <span>任务详情</span>
             </button>
-          )}
-          <button type="button" onClick={() => void deleteTask(task.id)}>
-            <Trash2 size={14} />
-            <span>删除</span>
-          </button>
-        </div>
-      </details>
+            {task.status !== 'archived' && (
+              <button type="button" onClick={() => { closeMenu(); void archiveTask(task.id); }}>
+                <Archive size={14} />
+                <span>归档</span>
+              </button>
+            )}
+            <button type="button" onClick={() => { closeMenu(); void deleteTask(task.id); }}>
+              <Trash2 size={14} />
+              <span>删除</span>
+            </button>
+          </div>
+        )}
+      </div>
+      {isDetailOpen && (
+        <TaskDetailDialog
+          task={task}
+          draftSourceType={draftSourceType}
+          draftStartDate={draftStartDate}
+          draftEndDate={draftEndDate}
+          canSaveSchedule={canSaveSchedule}
+          onClose={closeDetails}
+          onSaveSchedule={() => void saveSchedule()}
+          onChangeSourceType={updateDraftSourceType}
+          onChangeStartDate={(nextStartDate) => {
+            setDraftStartDate(nextStartDate);
+            if (draftSourceType !== 'manual' && draftEndDate < nextStartDate) {
+              setDraftEndDate(nextStartDate);
+            }
+          }}
+          onChangeEndDate={setDraftEndDate}
+        />
+      )}
     </div>
   );
+}
+
+interface TaskDetailDialogProps {
+  task: TaskOccurrence;
+  draftSourceType: TaskSourceType;
+  draftStartDate: string;
+  draftEndDate: string;
+  canSaveSchedule: boolean;
+  onClose: () => void;
+  onSaveSchedule: () => void;
+  onChangeSourceType: (sourceType: TaskSourceType) => void;
+  onChangeStartDate: (date: string) => void;
+  onChangeEndDate: (date: string) => void;
+}
+
+function TaskDetailDialog({
+  task,
+  draftSourceType,
+  draftStartDate,
+  draftEndDate,
+  canSaveSchedule,
+  onClose,
+  onSaveSchedule,
+  onChangeSourceType,
+  onChangeStartDate,
+  onChangeEndDate,
+}: TaskDetailDialogProps) {
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const sortedPostponements = [...task.postponementHistory]
+    .filter((postponement) => !postponement.deletedAt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.updatedAt.localeCompare(a.updatedAt));
+
+  return (
+    <div
+      className="task-detail-backdrop"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section className="task-detail-dialog" role="dialog" aria-modal="true" aria-label="任务详情">
+        <header className="task-detail-header">
+          <strong>任务详情</strong>
+          <button type="button" aria-label="关闭任务详情" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </header>
+        <div className="task-detail-body">
+          <div className="task-detail-title">
+            <strong>{task.title}</strong>
+            <span>{formatSourceType(task.sourceType)} · {formatStatus(task.status)}</span>
+          </div>
+          <div className="task-detail-grid">
+            <span>当前日期：{task.occurrenceDate}</span>
+            <span>开始：{task.definitionTaskDate}</span>
+            <span>截止：{task.endDate ?? '无'}</span>
+            <span>创建：{formatDateTime(task.createdAt)}</span>
+            <span>更新：{formatDateTime(task.updatedAt)}</span>
+            <span>最近延期：{task.postponedAt ? formatDateTime(task.postponedAt) : '无'}</span>
+          </div>
+          <div className="task-detail-history">
+            <strong>延期历史</strong>
+            {sortedPostponements.length > 0 ? (
+              sortedPostponements.map((postponement) => (
+                <span key={postponement.id}>
+                  {postponement.fromDate} -&gt; {postponement.toDate} · {formatDateTime(postponement.createdAt)}
+                </span>
+              ))
+            ) : (
+              <span>暂无延期记录</span>
+            )}
+          </div>
+          <div className="task-detail-schedule">
+            <button
+              type="button"
+              className="task-detail-toggle"
+              onClick={() => setIsScheduleOpen((current) => !current)}
+            >
+              <CalendarDays size={14} />
+              <span>高级排期</span>
+            </button>
+            {isScheduleOpen && (
+              <div className="task-detail-schedule-fields">
+                <label className="task-type-field">
+                  <span>类型</span>
+                  <select
+                    aria-label="任务类型"
+                    value={draftSourceType}
+                    onChange={(event) => onChangeSourceType(event.target.value as TaskSourceType)}
+                  >
+                    <option value="manual">普通</option>
+                    <option value="daily">每日</option>
+                    <option value="multi_day">长期</option>
+                  </select>
+                </label>
+                <label>
+                  <CalendarDays size={14} />
+                  <span>开始</span>
+                  <input
+                    aria-label="开始日期"
+                    type="date"
+                    value={draftStartDate}
+                    onChange={(event) => onChangeStartDate(event.target.value)}
+                  />
+                </label>
+                {draftSourceType !== 'manual' && (
+                  <label>
+                    <CalendarDays size={14} />
+                    <span>截止</span>
+                    <input
+                      aria-label="截止日期"
+                      type="date"
+                      value={draftEndDate}
+                      onChange={(event) => onChangeEndDate(event.target.value)}
+                    />
+                  </label>
+                )}
+                <div className="task-menu-actions">
+                  <button type="button" disabled={!canSaveSchedule} onClick={onSaveSchedule}>
+                    <Save size={14} />
+                    <span>保存排期</span>
+                  </button>
+                  <button type="button" className="ghost" onClick={onClose}>
+                    <span>取消</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function formatDateTime(value: string): string {
+  return value.slice(0, 16).replace('T', ' ');
+}
+
+function formatSourceType(sourceType: TaskSourceType): string {
+  if (sourceType === 'daily') return '每日';
+  if (sourceType === 'multi_day') return '长期';
+  return '普通';
+}
+
+function formatStatus(status: TaskOccurrence['status']): string {
+  if (status === 'completed') return '已完成';
+  if (status === 'archived') return '已归档';
+  if (status === 'deleted') return '已删除';
+  return '进行中';
 }

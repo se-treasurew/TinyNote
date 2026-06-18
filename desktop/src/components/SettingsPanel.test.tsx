@@ -83,11 +83,9 @@ describe('SettingsPanel theme choices', () => {
     expect(updateSetting).toHaveBeenCalledWith('backgroundImageDataUrl', null);
   });
 
-  it('updates the carry-progress setting', () => {
+  it('does not show the removed carry-progress setting', () => {
     render(<SettingsPanel />);
 
-    fireEvent.click(screen.getByLabelText('进度顺延'));
-
-    expect(updateSetting).toHaveBeenCalledWith('carryProgressForward', true);
+    expect(screen.queryByLabelText('进度顺延')).not.toBeInTheDocument();
   });
 });

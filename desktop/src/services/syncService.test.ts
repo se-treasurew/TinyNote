@@ -54,7 +54,7 @@ describe('sync/import merge rules', () => {
     expect(chooseMergedRecord(newRecord, sameVersionNewer)).toBe(sameVersionNewer);
   });
 
-  it('exports schema version 2 with task progress entries', () => {
+  it('exports schema version 3 with task progress entries and postponements', () => {
     const payload = createExportPayload({
       tasks: [],
       routines: [],
@@ -73,11 +73,23 @@ describe('sync/import merge rules', () => {
         syncStatus: 'local',
         version: 1,
       }],
+      taskPostponements: [{
+        id: 'postpone-1',
+        taskId: 'task-1',
+        fromDate: '2026-06-18',
+        toDate: '2026-06-19',
+        createdAt: '2026-06-18T01:00:00.000Z',
+        updatedAt: '2026-06-18T01:00:00.000Z',
+        deletedAt: null,
+        syncStatus: 'local',
+        version: 1,
+      }],
       settings: defaultSettings,
       now: '2026-06-18T00:00:00.000Z',
     });
 
-    expect(payload.schemaVersion).toBe(2);
+    expect(payload.schemaVersion).toBe(3);
     expect(payload.taskProgressEntries).toHaveLength(1);
+    expect(payload.taskPostponements).toHaveLength(1);
   });
 });

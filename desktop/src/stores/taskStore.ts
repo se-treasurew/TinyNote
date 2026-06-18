@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { CreateTaskInput, Task, TaskOccurrence, TasksByDate, UpdateTaskInput } from '../types/task';
 import { taskService } from '../services/taskService';
 import { navigateDate as calculateDateNavigation, resolveVisibleStartForDate } from '../services/dateNavigation';
+import { isBatchPostponeEligibleTask } from '../services/taskScheduling';
 import {
   applyArchive,
   applyComplete,
@@ -9,7 +10,7 @@ import {
   getActiveCountByDate,
   groupDateDisplayTasksByDate,
 } from '../services/taskWorkflow';
-import { getVisibleDateRange, todayIsoDate } from '../utils/date';
+import { addDays, getVisibleDateRange, todayIsoDate } from '../utils/date';
 
 let latestTaskLoadId = 0;
 let pendingNavigationLoad: ReturnType<typeof setTimeout> | undefined;
@@ -22,21 +23,21 @@ interface TaskState {
   visibleDates: string[];
   visibleStartDate: string;
   visibleDays: number;
-  carryProgressForward: boolean;
   selectedDate: string;
   isLoading: boolean;
   loadTasks: (
     visibleDays?: number,
     startDate?: string,
     selectedDate?: string,
-    carryProgressForward?: boolean,
   ) => Promise<void>;
   loadArchive: () => Promise<void>;
-  navigateDate: (direction: -1 | 1, visibleDays?: number, carryProgressForward?: boolean) => Promise<void>;
-  goToToday: (visibleDays?: number, carryProgressForward?: boolean) => Promise<void>;
+  navigateDate: (direction: -1 | 1, visibleDays?: number) => Promise<void>;
+  goToToday: (visibleDays?: number) => Promise<void>;
   addTask: (input: CreateTaskInput) => Promise<TaskOccurrence>;
   updateTask: (id: string, input: UpdateTaskInput) => Promise<void>;
   updateTaskProgress: (id: string, progressDate: string, percent: number) => Promise<void>;
+  postponeTask: (id: string, fromDate: string, toDate: string, sourceProgressPercent?: number) => Promise<void>;
+  postponeTasksForDate: (date: string) => Promise<void>;
   completeTask: (id: string, completeToArchive: boolean) => Promise<void>;
   archiveTask: (id: string) => Promise<void>;
   restoreTask: (id: string) => Promise<void>;
@@ -108,7 +109,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   visibleDates: getVisibleDateRange(todayIsoDate(), 7),
   visibleStartDate: todayIsoDate(),
   visibleDays: 7,
-  carryProgressForward: false,
   selectedDate: todayIsoDate(),
   isLoading: false,
 
@@ -116,24 +116,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     visibleDays = get().visibleDays,
     startDate = get().visibleStartDate,
     selectedDate = get().selectedDate,
-    carryProgressForward = get().carryProgressForward,
   ) {
     cancelPendingNavigationLoad();
     const dateWindow = buildDateWindow(visibleDays, startDate, selectedDate);
     const loadId = ++latestTaskLoadId;
-    set({ ...dateWindow, carryProgressForward, isLoading: true });
+    set({ ...dateWindow, isLoading: true });
 
     try {
-      const tasks = carryProgressForward
-        ? await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays, carryProgressForward)
-        : await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
+      const tasks = await taskService.loadVisibleTasks(dateWindow.visibleStartDate, visibleDays);
       if (loadId !== latestTaskLoadId) {
         return;
       }
 
       set({
         ...dateWindow,
-        carryProgressForward,
         tasks,
         tasksByDate: groupDateDisplayTasksByDate(tasks),
         isLoading: false,
@@ -151,7 +147,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ archiveTasks });
   },
 
-  async navigateDate(direction, visibleDays = get().visibleDays, carryProgressForward = get().carryProgressForward) {
+  async navigateDate(direction, visibleDays = get().visibleDays) {
     const next = calculateDateNavigation({
       direction,
       selectedDate: get().selectedDate,
@@ -160,16 +156,16 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     });
     const dateWindow = buildDateWindow(visibleDays, next.visibleStartDate, next.selectedDate);
     latestTaskLoadId += 1;
-    set({ ...dateWindow, carryProgressForward, isLoading: false });
+    set({ ...dateWindow, isLoading: false });
     scheduleNavigationLoad(async () => {
-      await get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate, carryProgressForward);
+      await get().loadTasks(visibleDays, dateWindow.visibleStartDate, dateWindow.selectedDate);
     });
   },
 
-  async goToToday(visibleDays = get().visibleDays, carryProgressForward = get().carryProgressForward) {
+  async goToToday(visibleDays = get().visibleDays) {
     const today = todayIsoDate();
     const startDate = resolveVisibleStartForDate(today, get().visibleStartDate, visibleDays);
-    await get().loadTasks(visibleDays, startDate, today, carryProgressForward);
+    await get().loadTasks(visibleDays, startDate, today);
   },
 
   async addTask(input) {
@@ -178,7 +174,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const task = await taskService.addTask(input);
     const startDate = resolveVisibleStartForDate(input.taskDate, get().visibleStartDate, get().visibleDays);
     if (startDate !== get().visibleStartDate) {
-      await get().loadTasks(get().visibleDays, startDate, input.taskDate, get().carryProgressForward);
+      await get().loadTasks(get().visibleDays, startDate, input.taskDate);
       return task;
     }
 
@@ -189,6 +185,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   async updateTask(id, input) {
     invalidatePendingLoads();
     set({ isLoading: false });
+    const isScheduleUpdate = input.taskDate !== undefined || input.endDate !== undefined || input.sourceType !== undefined;
     const current = get().tasks.find((task) => task.id === id);
     if (current) {
       const optimistic: TaskOccurrence = {
@@ -198,6 +195,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         content: input.content === undefined ? current.content : input.content,
         taskDate: input.taskDate ?? current.taskDate,
         endDate: input.endDate === undefined ? current.endDate : input.endDate,
+        sourceType: input.sourceType ?? current.sourceType,
+        postponedAt: input.postponedAt === undefined ? current.postponedAt : input.postponedAt,
         updatedAt: new Date().toISOString(),
         syncStatus: 'pending',
         version: current.version + 1,
@@ -212,8 +211,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       get().visibleStartDate,
       get().visibleDays,
     );
-    if (startDate !== get().visibleStartDate) {
-      await get().loadTasks(get().visibleDays, startDate, selectedDate, get().carryProgressForward);
+    if (isScheduleUpdate || startDate !== get().visibleStartDate) {
+      await get().loadTasks(get().visibleDays, startDate, selectedDate);
       return;
     }
 
@@ -234,10 +233,42 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
 
     try {
-      const updated = await taskService.updateTaskProgress(id, progressDate, percent, get().carryProgressForward);
+      const updated = await taskService.updateTaskProgress(id, progressDate, percent);
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
+      throw error;
+    }
+  },
+
+  async postponeTask(id, fromDate, toDate, sourceProgressPercent) {
+    invalidatePendingLoads();
+    set({ isLoading: false });
+    try {
+      await taskService.postponeTask(id, fromDate, toDate, sourceProgressPercent);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
+    } catch (error) {
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
+      throw error;
+    }
+  },
+
+  async postponeTasksForDate(date) {
+    const eligibleTasks = (get().tasksByDate[date] ?? []).filter((task) => isBatchPostponeEligibleTask(task, date));
+    if (eligibleTasks.length === 0) {
+      return;
+    }
+
+    const toDate = addDays(date, 1);
+    invalidatePendingLoads();
+      set({ isLoading: false });
+    try {
+      for (const task of eligibleTasks) {
+        await taskService.postponeTask(task.id, date, toDate, task.progressPercent);
+      }
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
+    } catch (error) {
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
     }
   },
@@ -256,7 +287,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
       void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
     }
   },
@@ -275,7 +306,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
       void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
     }
   },
@@ -294,7 +325,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
       void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
     }
   },
@@ -312,7 +343,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       set((state) => taskCollectionPatch(removeTask(state.tasks, id)));
       void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
-      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate, get().carryProgressForward);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
     }
   },

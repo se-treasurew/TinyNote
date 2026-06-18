@@ -29,6 +29,7 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
   completedAt: null,
   archivedAt: null,
   deletedAt: null,
+  postponedAt: null,
   createdAt: '2026-06-18T00:00:00.000Z',
   updatedAt: '2026-06-18T00:00:00.000Z',
   syncStatus: 'local',
@@ -53,6 +54,10 @@ describe('TaskManagePanel', () => {
         occurrenceDate: '2026-06-18',
         progressPercent: 0,
         progressEntryId: null,
+        postponementId: null,
+        postponedFromDate: null,
+        postponedToDate: null,
+        postponementHistory: [],
       })),
       updateTask: vi.fn(async () => undefined),
       deleteTask: vi.fn(async () => undefined),
@@ -100,6 +105,10 @@ describe('TaskManagePanel', () => {
       occurrenceDate: '2026-06-20',
       progressPercent: 0,
       progressEntryId: null,
+      postponementId: null,
+      postponedFromDate: null,
+      postponedToDate: null,
+      postponementHistory: [],
     }));
     useTaskStore.setState({ addTask });
     await renderPanel();
@@ -117,6 +126,25 @@ describe('TaskManagePanel', () => {
         endDate: null,
       });
     });
+  });
+
+  it('lays out editing controls as a full-width form with bottom actions', async () => {
+    vi.mocked(taskService.loadAll).mockResolvedValue([
+      baseTask({ title: '复盘任务', endDate: '2026-06-20' }),
+    ]);
+    await renderPanel();
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+
+    const saveButton = screen.getByRole('button', { name: '保存' });
+    const editForm = saveButton.closest('.panel-edit-form');
+    expect(editForm).not.toBeNull();
+    expect(editForm?.closest('.routine-row')).toHaveClass('editing');
+    expect(saveButton.closest('.panel-form-actions')).not.toBeNull();
+    expect(screen.getByRole('button', { name: '取消' }).closest('.panel-form-actions')).not.toBeNull();
+    expect(screen.getByLabelText('编辑任务标题')).toHaveValue('复盘任务');
+    expect(screen.getByLabelText('编辑开始日期')).toHaveValue('2026-06-18');
+    expect(screen.getByLabelText('编辑结束日期')).toHaveValue('2026-06-20');
   });
 });
 

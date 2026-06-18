@@ -33,6 +33,7 @@ const baseTask = (overrides: Partial<TaskOccurrence> = {}): TaskOccurrence => ({
   completedAt: null,
   archivedAt: null,
   deletedAt: null,
+  postponedAt: null,
   createdAt: '2026-06-16T00:00:00.000Z',
   updatedAt: '2026-06-16T00:00:00.000Z',
   syncStatus: 'local',
@@ -41,6 +42,10 @@ const baseTask = (overrides: Partial<TaskOccurrence> = {}): TaskOccurrence => ({
   occurrenceDate: '2026-06-16',
   progressPercent: 0,
   progressEntryId: null,
+  postponementId: null,
+  postponedFromDate: null,
+  postponedToDate: null,
+  postponementHistory: [],
   ...overrides,
 });
 
@@ -72,10 +77,10 @@ describe('MainPage display layout', () => {
       visibleDates: ['2026-06-16', '2026-06-17'],
       visibleStartDate: '2026-06-16',
       visibleDays: 7,
-      carryProgressForward: false,
       selectedDate: '2026-06-16',
       isLoading: false,
       loadTasks: vi.fn(async () => undefined),
+      postponeTasksForDate: vi.fn(async () => undefined),
     });
     useUiStore.setState({
       currentPanel: 'main',
@@ -116,7 +121,7 @@ describe('MainPage display layout', () => {
     fireEvent.click(screen.getByRole('button', { name: '下一个日期' }));
 
     await waitFor(() => {
-      expect(navigateDate).toHaveBeenCalledWith(1, 7, false);
+      expect(navigateDate).toHaveBeenCalledWith(1, 7);
     });
   });
 
@@ -158,5 +163,31 @@ describe('MainPage display layout', () => {
         endDate: null,
       });
     });
+  });
+
+  it('postpones eligible tasks from the bottom bar for the selected date', async () => {
+    const postponeTasksForDate = vi.fn(async () => undefined);
+    useTaskStore.setState({ postponeTasksForDate });
+
+    render(<MainPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '顺延' }));
+
+    await waitFor(() => {
+      expect(postponeTasksForDate).toHaveBeenCalledWith('2026-06-16');
+    });
+  });
+
+  it('disables bottom postpone when the selected date has no eligible tasks', () => {
+    const daily = baseTask({ id: 'daily-only', sourceType: 'daily' });
+    useTaskStore.setState({
+      tasks: [daily],
+      tasksByDate: { '2026-06-16': [daily] },
+      postponeTasksForDate: vi.fn(async () => undefined),
+    });
+
+    render(<MainPage />);
+
+    expect(screen.getByRole('button', { name: '顺延' })).toBeDisabled();
   });
 });

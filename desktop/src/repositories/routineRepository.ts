@@ -231,15 +231,15 @@ async function insertGeneratedTask(db: TinyNoteDatabase, task: Task): Promise<bo
       db,
       `INSERT INTO tasks (
         id, user_id, device_id, title, content, task_date, end_date, status, priority, source_type,
-        routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at,
+        routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at, postponed_at,
         created_at, updated_at, sync_status, version
       )
-      SELECT ${placeholders(20)}
+      SELECT ${placeholders(21)}
       WHERE NOT EXISTS (
         SELECT 1
         FROM routine_instances
-        WHERE routine_id = $21
-          AND instance_date = $22
+        WHERE routine_id = $22
+          AND instance_date = $23
       )`,
       [...params, task.routineId, task.taskDate],
     )
@@ -247,10 +247,10 @@ async function insertGeneratedTask(db: TinyNoteDatabase, task: Task): Promise<bo
       db,
       `INSERT INTO tasks (
         id, user_id, device_id, title, content, task_date, end_date, status, priority, source_type,
-        routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at,
+        routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at, postponed_at,
         created_at, updated_at, sync_status, version
       )
-      VALUES (${placeholders(20)})`,
+      VALUES (${placeholders(21)})`,
       params,
     );
 

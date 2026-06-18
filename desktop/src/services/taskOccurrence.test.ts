@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildTaskOccurrences, clampProgressPercent } from './taskOccurrence';
-import type { Task, TaskProgressEntry } from '../types/task';
+import type { Task, TaskPostponement, TaskProgressEntry } from '../types/task';
 
 vi.mock('../utils/date', () => ({
   todayIsoDate: () => '2026-06-17',
@@ -23,6 +23,7 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
   completedAt: null,
   archivedAt: null,
   deletedAt: null,
+  postponedAt: null,
   createdAt: '2026-06-16T00:00:00.000Z',
   updatedAt: '2026-06-16T00:00:00.000Z',
   syncStatus: 'local',
@@ -46,14 +47,27 @@ const progressEntry = (overrides: Partial<TaskProgressEntry> = {}): TaskProgress
   ...overrides,
 });
 
+const postponement = (overrides: Partial<TaskPostponement> = {}): TaskPostponement => ({
+  id: 'postpone-1',
+  taskId: 'task-1',
+  fromDate: '2026-06-16',
+  toDate: '2026-06-17',
+  createdAt: '2026-06-16T01:00:00.000Z',
+  updatedAt: '2026-06-16T01:00:00.000Z',
+  deletedAt: null,
+  syncStatus: 'local',
+  version: 1,
+  ...overrides,
+});
+
 describe('task occurrences', () => {
   it('shows daily tasks on future dates and resets progress each day', () => {
     const task = baseTask({ sourceType: 'daily', taskDate: '2026-06-16', endDate: null });
     const occurrences = buildTaskOccurrences({
       tasks: [task],
       progressEntries: [progressEntry({ progressDate: '2026-06-16', percent: 80 })],
+      postponements: [],
       visibleDates: ['2026-06-16', '2026-06-17', '2026-06-18'],
-      carryProgressForward: true,
     });
 
     expect(occurrences.map((item) => item.taskDate)).toEqual(['2026-06-16', '2026-06-17', '2026-06-18']);
@@ -67,56 +81,71 @@ describe('task occurrences', () => {
     const withoutCarry = buildTaskOccurrences({
       tasks: [task],
       progressEntries: [progressEntry({ progressDate: '2026-06-16', percent: 35 })],
+      postponements: [],
       visibleDates: ['2026-06-15', '2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19'],
-      carryProgressForward: false,
     });
     expect(withoutCarry.map((item) => [item.taskDate, item.progressPercent])).toEqual([
       ['2026-06-16', 35],
-      ['2026-06-17', 0],
-      ['2026-06-18', 0],
+      ['2026-06-17', 35],
+      ['2026-06-18', 35],
     ]);
   });
 
-  it('carries multi-day progress forward only to dates up to today', () => {
+  it('carries multi-day progress forward while direct entries override inherited progress', () => {
     const task = baseTask({ sourceType: 'multi_day', taskDate: '2026-06-16', endDate: '2026-06-19' });
-    // today is mocked to 2026-06-17
 
-    const withCarry = buildTaskOccurrences({
+    const occurrences = buildTaskOccurrences({
       tasks: [task],
-      progressEntries: [progressEntry({ progressDate: '2026-06-16', percent: 35 })],
+      progressEntries: [
+        progressEntry({ id: 'progress-1', progressDate: '2026-06-16', percent: 35 }),
+        progressEntry({ id: 'progress-2', progressDate: '2026-06-18', percent: 60 }),
+      ],
+      postponements: [],
       visibleDates: ['2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19'],
-      carryProgressForward: true,
     });
-    // 06-16 has direct entry (35%), 06-17 inherits (<= today), 06-18/19 are future → 0%
-    expect(withCarry.map((item) => [item.taskDate, item.progressPercent])).toEqual([
+    expect(occurrences.map((item) => [item.taskDate, item.progressPercent])).toEqual([
       ['2026-06-16', 35],
       ['2026-06-17', 35],
-      ['2026-06-18', 0],
-      ['2026-06-19', 0],
+      ['2026-06-18', 60],
+      ['2026-06-19', 60],
     ]);
   });
 
-  it('manual tasks never carry forward regardless of setting', () => {
+  it('manual tasks show only on their own date', () => {
     const task = baseTask({ sourceType: 'manual', taskDate: '2026-06-16' });
     const entries = [progressEntry({ progressDate: '2026-06-16', percent: 20 })];
 
-    const withoutCarry = buildTaskOccurrences({
+    const occurrences = buildTaskOccurrences({
       tasks: [task],
       progressEntries: entries,
+      postponements: [],
       visibleDates: ['2026-06-16', '2026-06-17'],
-      carryProgressForward: false,
     });
-    expect(withoutCarry.map((item) => item.taskDate)).toEqual(['2026-06-16']);
+    expect(occurrences.map((item) => item.taskDate)).toEqual(['2026-06-16']);
+    expect(occurrences[0].progressPercent).toBe(20);
+  });
 
-    const withCarry = buildTaskOccurrences({
-      tasks: [task],
-      progressEntries: entries,
-      visibleDates: ['2026-06-16', '2026-06-17'],
-      carryProgressForward: true,
+  it('keeps a manual task on its original date and adds the postponed target date', () => {
+    const task = baseTask({
+      sourceType: 'manual',
+      taskDate: '2026-06-16',
+      postponedAt: '2026-06-16T01:00:00.000Z',
     });
-    // manual tasks should only appear on their own date, even with carry-forward on
-    expect(withCarry.map((item) => item.taskDate)).toEqual(['2026-06-16']);
-    expect(withCarry[0].progressPercent).toBe(20);
+
+    const occurrences = buildTaskOccurrences({
+      tasks: [task],
+      progressEntries: [progressEntry({ progressDate: '2026-06-17', percent: 25 })],
+      postponements: [postponement({ fromDate: '2026-06-16', toDate: '2026-06-17' })],
+      visibleDates: ['2026-06-16', '2026-06-17'],
+    });
+
+    expect(occurrences.map((item) => [item.taskDate, item.postponedFromDate, item.postponedToDate])).toEqual([
+      ['2026-06-16', '2026-06-16', '2026-06-17'],
+      ['2026-06-17', '2026-06-16', '2026-06-17'],
+    ]);
+    expect(occurrences[1].postponementId).toBe('postpone-1');
+    expect(occurrences[1].postponementHistory).toHaveLength(1);
+    expect(occurrences[1].progressPercent).toBe(25);
   });
 
   it('uses per-date completion for recurring task occurrences', () => {
@@ -124,8 +153,8 @@ describe('task occurrences', () => {
     const occurrences = buildTaskOccurrences({
       tasks: [task],
       progressEntries: [progressEntry({ progressDate: '2026-06-17', status: 'completed', percent: 100 })],
+      postponements: [],
       visibleDates: ['2026-06-16', '2026-06-17'],
-      carryProgressForward: false,
     });
 
     expect(occurrences.map((item) => [item.taskDate, item.status, item.progressPercent])).toEqual([

@@ -3,7 +3,7 @@ import { SettingsRepository } from '../repositories/settingsRepository';
 import { TaskRepository } from '../repositories/taskRepository';
 import type { AppSettings } from '../types/settings';
 import type { Routine } from '../types/routine';
-import type { Task, TaskProgressEntry } from '../types/task';
+import type { Task, TaskPostponement, TaskProgressEntry } from '../types/task';
 import { chooseMergedRecord, createExportPayload, type TinyNoteExport, type TinyNoteImport } from './syncService';
 import { writeSyncLog } from './syncLogService';
 
@@ -13,11 +13,12 @@ const settingsRepository = new SettingsRepository();
 
 export const dataPortabilityService = {
   async exportData(): Promise<TinyNoteExport> {
-    const [tasks, routines, routineInstances, taskProgressEntries, settings] = await Promise.all([
+    const [tasks, routines, routineInstances, taskProgressEntries, taskPostponements, settings] = await Promise.all([
       taskRepository.listAll(),
       routineRepository.listRoutines(true),
       routineRepository.listInstances(),
       taskRepository.listAllProgressEntries(),
+      taskRepository.listAllPostponements(),
       settingsRepository.load(),
     ]);
 
@@ -26,6 +27,7 @@ export const dataPortabilityService = {
       routines,
       routineInstances,
       taskProgressEntries,
+      taskPostponements,
       settings,
     });
   },
@@ -33,14 +35,16 @@ export const dataPortabilityService = {
   async importData(payload: TinyNoteImport): Promise<void> {
     assertPayload(payload);
 
-    const [localTasks, localRoutines, localProgressEntries] = await Promise.all([
+    const [localTasks, localRoutines, localProgressEntries, localPostponements] = await Promise.all([
       taskRepository.listAll(),
       routineRepository.listRoutines(true),
       taskRepository.listAllProgressEntries(),
+      taskRepository.listAllPostponements(),
     ]);
     const localTaskMap = new Map(localTasks.map((task) => [task.id, task]));
     const localRoutineMap = new Map(localRoutines.map((routine) => [routine.id, routine]));
     const localProgressMap = new Map(localProgressEntries.map((entry) => [entry.id, entry]));
+    const localPostponementMap = new Map(localPostponements.map((postponement) => [postponement.id, postponement]));
 
     for (const incoming of payload.tasks) {
       const local = localTaskMap.get(incoming.id);
@@ -70,6 +74,23 @@ export const dataPortabilityService = {
       }
     }
 
+    if (payload.schemaVersion === 3) {
+      for (const incoming of payload.taskProgressEntries) {
+        const local = localProgressMap.get(incoming.id);
+        const merged = local ? chooseMergedRecord(local, incoming) : incoming;
+        await taskRepository.upsertProgressEntry(merged);
+        await writeSyncLog({ entityType: 'task_progress', entityId: merged.id, operation: 'import', payload: merged });
+      }
+
+      for (const incoming of payload.taskPostponements) {
+        const normalized = normalizeImportedPostponement(incoming);
+        const local = localPostponementMap.get(normalized.id);
+        const merged = local ? chooseMergedRecord(local, normalized) : normalized;
+        await taskRepository.upsertPostponement(merged);
+        await writeSyncLog({ entityType: 'task_postponement', entityId: merged.id, operation: 'import', payload: merged });
+      }
+    }
+
     await settingsRepository.setMany(payload.settings);
   },
 };
@@ -77,9 +98,10 @@ export const dataPortabilityService = {
 function assertPayload(payload: TinyNoteImport): void {
   if (
     !payload ||
-    (payload.schemaVersion !== 1 && payload.schemaVersion !== 2) ||
+    (payload.schemaVersion !== 1 && payload.schemaVersion !== 2 && payload.schemaVersion !== 3) ||
     !Array.isArray(payload.tasks) ||
-    !Array.isArray(payload.routines)
+    !Array.isArray(payload.routines) ||
+    (payload.schemaVersion === 3 && !Array.isArray(payload.taskPostponements))
   ) {
     throw new Error('Invalid TinyNote export file');
   }
@@ -90,6 +112,7 @@ function normalizeImportedTask(task: Task): Task {
   return {
     ...task,
     endDate: task.endDate ?? null,
+    postponedAt: task.postponedAt ?? null,
     sourceType: sourceType === 'routine_daily' ? 'daily' : task.sourceType,
   } as Task;
 }
@@ -101,4 +124,11 @@ function routineAsSyncable(routine: Routine): Routine & { status?: string } {
   };
 }
 
-export type { AppSettings, Task, Routine, TaskProgressEntry };
+function normalizeImportedPostponement(postponement: TaskPostponement): TaskPostponement {
+  return {
+    ...postponement,
+    deletedAt: postponement.deletedAt ?? null,
+  };
+}
+
+export type { AppSettings, Task, Routine, TaskProgressEntry, TaskPostponement };

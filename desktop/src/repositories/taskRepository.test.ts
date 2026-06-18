@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { mapTaskProgressEntryRow, taskProgressEntryToParams, taskToUpdateParams } from './taskRepository';
-import type { Task, TaskProgressEntry, TaskProgressEntryRow } from '../types/task';
+import {
+  mapTaskPostponementRow,
+  mapTaskProgressEntryRow,
+  taskPostponementToParams,
+  taskProgressEntryToParams,
+  taskToUpdateParams,
+} from './taskRepository';
+import type { Task, TaskPostponement, TaskPostponementRow, TaskProgressEntry, TaskProgressEntryRow } from '../types/task';
 
 const task: Task = {
   id: 'task-1',
@@ -19,6 +25,7 @@ const task: Task = {
   completedAt: '2026-06-16T01:00:00.000Z',
   archivedAt: null,
   deletedAt: null,
+  postponedAt: '2026-06-16T02:00:00.000Z',
   createdAt: '2026-06-16T00:00:00.000Z',
   updatedAt: '2026-06-16T01:00:00.000Z',
   syncStatus: 'pending',
@@ -44,6 +51,7 @@ describe('task repository parameter mapping', () => {
       '2026-06-16T01:00:00.000Z',
       null,
       null,
+      '2026-06-16T02:00:00.000Z',
       '2026-06-16T01:00:00.000Z',
       'pending',
       2,
@@ -94,6 +102,44 @@ describe('task repository parameter mapping', () => {
       '2026-06-17T01:00:00.000Z',
       'pending',
       2,
+    ]);
+  });
+
+  it('maps task postponements to database rows and insert parameters', () => {
+    const postponement: TaskPostponement = {
+      id: 'postpone-1',
+      taskId: 'task-1',
+      fromDate: '2026-06-18',
+      toDate: '2026-06-20',
+      createdAt: '2026-06-18T01:00:00.000Z',
+      updatedAt: '2026-06-18T01:00:00.000Z',
+      deletedAt: null,
+      syncStatus: 'pending',
+      version: 1,
+    };
+    const row: TaskPostponementRow = {
+      id: 'postpone-1',
+      task_id: 'task-1',
+      from_date: '2026-06-18',
+      to_date: '2026-06-20',
+      created_at: '2026-06-18T01:00:00.000Z',
+      updated_at: '2026-06-18T01:00:00.000Z',
+      deleted_at: null,
+      sync_status: 'pending',
+      version: 1,
+    };
+
+    expect(mapTaskPostponementRow(row)).toEqual(postponement);
+    expect(taskPostponementToParams(postponement)).toEqual([
+      'postpone-1',
+      'task-1',
+      '2026-06-18',
+      '2026-06-20',
+      '2026-06-18T01:00:00.000Z',
+      '2026-06-18T01:00:00.000Z',
+      null,
+      'pending',
+      1,
     ]);
   });
 });

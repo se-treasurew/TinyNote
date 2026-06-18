@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
+import { CalendarClock, ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
 import { ArchivePanel } from '../components/ArchivePanel';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { TaskManagePanel } from '../components/TaskManagePanel';
@@ -9,6 +9,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
 import { todayIsoDate } from '../utils/date';
 import { useUiStore } from '../stores/uiStore';
+import { isBatchPostponeEligibleTask } from '../services/taskScheduling';
 
 export function MainPage() {
   const [isAdding, setIsAdding] = useState(false);
@@ -23,6 +24,7 @@ export function MainPage() {
   const goToToday = useTaskStore((state) => state.goToToday);
   const addTask = useTaskStore((state) => state.addTask);
   const deleteTask = useTaskStore((state) => state.deleteTask);
+  const postponeTasksForDate = useTaskStore((state) => state.postponeTasksForDate);
   const loadTasks = useTaskStore((state) => state.loadTasks);
   const isArchiveOpen = useUiStore((state) => state.isArchiveOpen);
   const isSettingsOpen = useUiStore((state) => state.isSettingsOpen);
@@ -30,6 +32,7 @@ export function MainPage() {
   const selectedTasks = tasksByDate[selectedDate] ?? [];
   const activeTasks = selectedTasks.filter((task) => task.status === 'active');
   const doneTasks = selectedTasks.filter((task) => task.status === 'completed' || task.status === 'archived');
+  const canPostponeSelectedDate = activeTasks.some((task) => isBatchPostponeEligibleTask(task, selectedDate));
 
   const activeCountByDate = useMemo(() => {
     return tasks.reduce<Record<string, number>>((counts, task) => {
@@ -43,8 +46,8 @@ export function MainPage() {
   const dateStripRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    void loadTasks(settings.visibleDays, undefined, undefined, settings.carryProgressForward);
-  }, [loadTasks, settings.visibleDays, settings.carryProgressForward]);
+    void loadTasks(settings.visibleDays);
+  }, [loadTasks, settings.visibleDays]);
 
   // Auto-scroll the selected date tab into view
   useEffect(() => {
@@ -57,7 +60,7 @@ export function MainPage() {
   }, [selectedDate]);
 
   async function selectAdjacentDate(direction: -1 | 1) {
-    await navigateDate(direction, settings.visibleDays, settings.carryProgressForward);
+    await navigateDate(direction, settings.visibleDays);
     setIsAdding(false);
   }
 
@@ -132,7 +135,7 @@ export function MainPage() {
           type="button"
           className={`date-today ${selectedDate === todayIsoDate() ? 'is-today' : ''}`}
           aria-label="回到今天"
-          onClick={() => void goToToday(settings.visibleDays, settings.carryProgressForward)}
+          onClick={() => void goToToday(settings.visibleDays)}
         >
           今天
         </button>
@@ -186,6 +189,15 @@ export function MainPage() {
             <span>添加</span>
           </button>
         )}
+        <button
+          type="button"
+          className="bottom-action postpone"
+          disabled={!canPostponeSelectedDate}
+          onClick={() => void postponeTasksForDate(selectedDate)}
+        >
+          <CalendarClock size={18} />
+          <span>顺延</span>
+        </button>
         <button
           type="button"
           className="bottom-action clear"

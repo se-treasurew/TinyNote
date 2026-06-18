@@ -165,13 +165,38 @@ export function TaskManagePanel() {
       )}
       <div className="panel-list">
         {filtered.map((task) => (
-          <div className="routine-row" key={task.id}>
+          <div className={`routine-row ${editingId === task.id ? 'editing' : ''}`} key={task.id}>
             {editingId === task.id ? (
-              <div className="panel-form">
-                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="标题" />
+              <div className="panel-form panel-edit-form">
+                <label className="field-label">
+                  <span>任务名称</span>
+                  <input
+                    aria-label="编辑任务标题"
+                    autoFocus
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="任务名称"
+                  />
+                </label>
                 <div className="date-pair">
-                  <input type="date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} />
-                  <input type="date" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
+                  <label className="field-label">
+                    <span>开始日期</span>
+                    <input
+                      aria-label="编辑开始日期"
+                      type="date"
+                      value={editStartDate}
+                      onChange={(e) => setEditStartDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="field-label">
+                    <span>{modeCopy.endDateLabel}</span>
+                    <input
+                      aria-label="编辑结束日期"
+                      type="date"
+                      value={editEndDate}
+                      onChange={(e) => setEditEndDate(e.target.value)}
+                    />
+                  </label>
                 </div>
                 <div className="panel-form-actions">
                   <button type="button" onClick={() => void saveEdit()}>保存</button>

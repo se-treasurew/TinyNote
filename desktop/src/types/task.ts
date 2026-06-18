@@ -20,6 +20,7 @@ export interface Task {
   completedAt: string | null;
   archivedAt: string | null;
   deletedAt: string | null;
+  postponedAt: string | null;
   createdAt: string;
   updatedAt: string;
   syncStatus: SyncStatus;
@@ -31,6 +32,10 @@ export interface TaskOccurrence extends Task {
   occurrenceDate: string;
   progressPercent: number;
   progressEntryId: string | null;
+  postponementId: string | null;
+  postponedFromDate: string | null;
+  postponedToDate: string | null;
+  postponementHistory: TaskPostponement[];
 }
 
 export interface TaskProgressEntry {
@@ -44,6 +49,18 @@ export interface TaskProgressEntry {
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  syncStatus: SyncStatus;
+  version: number;
+}
+
+export interface TaskPostponement {
+  id: string;
+  taskId: string;
+  fromDate: string;
+  toDate: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
   syncStatus: SyncStatus;
   version: number;
 }
@@ -68,6 +85,8 @@ export interface UpdateTaskInput {
   content?: string | null;
   taskDate?: string;
   endDate?: string | null;
+  sourceType?: TaskSourceType;
+  postponedAt?: string | null;
   sortOrder?: number;
 }
 
@@ -90,6 +109,7 @@ export interface TaskRow {
   completed_at: string | null;
   archived_at: string | null;
   deleted_at: string | null;
+  postponed_at: string | null;
   created_at: string;
   updated_at: string;
   sync_status: SyncStatus;
@@ -107,6 +127,18 @@ export interface TaskProgressEntryRow {
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+  sync_status: SyncStatus;
+  version: number;
+}
+
+export interface TaskPostponementRow {
+  id: string;
+  task_id: string;
+  from_date: string;
+  to_date: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
   sync_status: SyncStatus;
   version: number;
 }

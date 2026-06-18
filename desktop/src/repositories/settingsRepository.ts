@@ -27,7 +27,9 @@ export class SettingsRepository {
 
   async setMany(settings: Partial<AppSettings>): Promise<void> {
     for (const [key, value] of Object.entries(settings)) {
-      await this.set(key as AppSettingKey, value as never);
+      if (key in defaultSettings) {
+        await this.set(key as AppSettingKey, value as never);
+      }
     }
   }
 }

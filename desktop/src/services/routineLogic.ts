@@ -92,6 +92,7 @@ function createTaskDraft(input: {
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
+    postponedAt: null,
     createdAt: input.now,
     updatedAt: input.now,
     syncStatus: 'local',
