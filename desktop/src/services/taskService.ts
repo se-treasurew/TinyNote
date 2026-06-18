@@ -92,7 +92,7 @@ export class TaskService {
 
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return taskToOccurrence(updated, input.taskDate ?? updated.taskDate, [], []);
+    return this.taskToOccurrenceWithHistory(updated, input.taskDate ?? updated.taskDate);
   }
 
   async updateTaskProgress(
@@ -184,7 +184,7 @@ export class TaskService {
     const updated = applyComplete(task, completeToArchive, new Date().toISOString());
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return taskToOccurrence(updated, occurrenceDate ?? updated.taskDate, [], []);
+    return this.taskToOccurrenceWithHistory(updated, occurrenceDate ?? updated.taskDate);
   }
 
   async archiveTask(id: string): Promise<TaskOccurrence> {
@@ -192,7 +192,7 @@ export class TaskService {
     const updated = applyArchive(task, new Date().toISOString());
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return taskToOccurrence(updated, updated.taskDate, [], []);
+    return this.taskToOccurrenceWithHistory(updated, updated.taskDate);
   }
 
   async restoreTask(id: string, occurrenceDate?: string): Promise<TaskOccurrence> {
@@ -204,7 +204,7 @@ export class TaskService {
     const updated = applyRestore(task, new Date().toISOString());
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return taskToOccurrence(updated, occurrenceDate ?? updated.taskDate, [], []);
+    return this.taskToOccurrenceWithHistory(updated, occurrenceDate ?? updated.taskDate);
   }
 
   async deleteTask(id: string): Promise<TaskOccurrence> {
@@ -249,7 +249,16 @@ export class TaskService {
 
     await taskRepository.upsertProgressEntry(entry);
     await writeSyncLog({ entityType: 'task_progress', entityId: entry.id, operation: 'update', payload: entry });
-    return taskToOccurrence(task, progressDate, [entry], []);
+    return this.taskToOccurrenceWithHistory(task, progressDate, [entry]);
+  }
+
+  private async taskToOccurrenceWithHistory(
+    task: Task,
+    occurrenceDate: string,
+    progressEntries: TaskProgressEntry[] = [],
+  ): Promise<TaskOccurrence> {
+    const postponements = await taskRepository.listPostponements([task.id]);
+    return taskToOccurrence(task, occurrenceDate, progressEntries, postponements);
   }
 
   private async resolveProgressForPostponement(task: Task, fromDate: string): Promise<TaskProgressEntry | null> {

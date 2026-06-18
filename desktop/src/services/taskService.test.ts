@@ -190,6 +190,28 @@ describe('task service occurrence and progress behavior', () => {
     expect(occurrence.postponementHistory).toEqual([history]);
   });
 
+  it('preserves postponement history when updating task definitions', async () => {
+    const task = baseTask({
+      sourceType: 'manual',
+      taskDate: '2026-06-18',
+      postponedAt: '2026-06-18T01:00:00.000Z',
+    });
+    const history = taskPostponement({
+      fromDate: '2026-06-18',
+      toDate: '2026-06-20',
+    });
+    mocks.findById.mockResolvedValue(task);
+    mocks.listPostponements.mockResolvedValue([history]);
+
+    const occurrence = await taskService.updateTask('task-1', { title: '阅读新版' });
+
+    expect(mocks.listPostponements).toHaveBeenCalledWith(['task-1']);
+    expect(occurrence.title).toBe('阅读新版');
+    expect(occurrence.postponedFromDate).toBe('2026-06-18');
+    expect(occurrence.postponedToDate).toBe('2026-06-20');
+    expect(occurrence.postponementHistory).toEqual([history]);
+  });
+
   it('completes daily occurrences by writing progress state instead of saving the task definition', async () => {
     const task = baseTask({ sourceType: 'daily' });
     mocks.findById.mockResolvedValue(task);
@@ -204,6 +226,67 @@ describe('task service occurrence and progress behavior', () => {
     }));
     expect(occurrence.status).toBe('completed');
     expect(occurrence.taskDate).toBe('2026-06-18');
+  });
+
+  it('preserves postponement history when completing a postponed occurrence', async () => {
+    const task = baseTask({
+      sourceType: 'daily',
+      taskDate: '2026-06-18',
+      postponedAt: '2026-06-18T01:00:00.000Z',
+    });
+    const history = taskPostponement({
+      fromDate: '2026-06-18',
+      toDate: '2026-06-20',
+    });
+    mocks.findById.mockResolvedValue(task);
+    mocks.listPostponements.mockResolvedValue([history]);
+
+    const occurrence = await taskService.completeTask('task-1', false, '2026-06-20');
+
+    expect(mocks.listPostponements).toHaveBeenCalledWith(['task-1']);
+    expect(occurrence.status).toBe('completed');
+    expect(occurrence.postponementHistory).toEqual([history]);
+  });
+
+  it('preserves postponement history when archiving a postponed task', async () => {
+    const task = baseTask({
+      sourceType: 'manual',
+      taskDate: '2026-06-18',
+      postponedAt: '2026-06-18T01:00:00.000Z',
+    });
+    const history = taskPostponement({
+      fromDate: '2026-06-18',
+      toDate: '2026-06-20',
+    });
+    mocks.findById.mockResolvedValue(task);
+    mocks.listPostponements.mockResolvedValue([history]);
+
+    const occurrence = await taskService.archiveTask('task-1');
+
+    expect(mocks.listPostponements).toHaveBeenCalledWith(['task-1']);
+    expect(occurrence.status).toBe('archived');
+    expect(occurrence.postponementHistory).toEqual([history]);
+  });
+
+  it('preserves postponement history when restoring a postponed occurrence', async () => {
+    const task = baseTask({
+      sourceType: 'daily',
+      taskDate: '2026-06-18',
+      status: 'completed',
+      postponedAt: '2026-06-18T01:00:00.000Z',
+    });
+    const history = taskPostponement({
+      fromDate: '2026-06-18',
+      toDate: '2026-06-20',
+    });
+    mocks.findById.mockResolvedValue(task);
+    mocks.listPostponements.mockResolvedValue([history]);
+
+    const occurrence = await taskService.restoreTask('task-1', '2026-06-20');
+
+    expect(mocks.listPostponements).toHaveBeenCalledWith(['task-1']);
+    expect(occurrence.status).toBe('active');
+    expect(occurrence.postponementHistory).toEqual([history]);
   });
 
   it('preserves existing target-date progress instead of overwriting it on postpone', async () => {

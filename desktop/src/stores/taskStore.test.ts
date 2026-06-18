@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TaskOccurrence } from '../types/task';
+import type { TaskOccurrence, TaskPostponement } from '../types/task';
 import { useTaskStore } from './taskStore';
 
 const mocks = vi.hoisted(() => ({
@@ -57,6 +57,19 @@ const baseTask = (overrides: Partial<TaskOccurrence> = {}): TaskOccurrence => ({
   postponedFromDate: null,
   postponedToDate: null,
   postponementHistory: [],
+  ...overrides,
+});
+
+const taskPostponement = (overrides: Partial<TaskPostponement> = {}): TaskPostponement => ({
+  id: 'postpone-1',
+  taskId: 'task-1',
+  fromDate: '2026-06-18',
+  toDate: '2026-06-20',
+  createdAt: '2026-06-18T01:00:00.000Z',
+  updatedAt: '2026-06-18T01:00:00.000Z',
+  deletedAt: null,
+  syncStatus: 'local',
+  version: 1,
   ...overrides,
 });
 
@@ -145,6 +158,70 @@ describe('task store date window behavior', () => {
 
     expect(mocks.loadVisibleTasks).toHaveBeenCalledWith('2026-06-17', 3);
     expect(useTaskStore.getState().tasksByDate['2026-06-19']?.[0]?.sourceType).toBe('multi_day');
+  });
+
+  it('syncs task definition edits across all visible occurrences without changing per-date state', async () => {
+    const history = [taskPostponement({ toDate: '2026-06-21' })];
+    const firstOccurrence = baseTask({
+      id: 'task-1',
+      title: '旧标题',
+      sourceType: 'multi_day',
+      taskDate: '2026-06-18',
+      definitionTaskDate: '2026-06-18',
+      occurrenceDate: '2026-06-18',
+      endDate: '2026-06-20',
+      progressPercent: 25,
+      status: 'active',
+      progressEntryId: 'progress-18',
+    });
+    const secondOccurrence = baseTask({
+      id: 'task-1',
+      title: '旧标题',
+      sourceType: 'multi_day',
+      taskDate: '2026-06-19',
+      definitionTaskDate: '2026-06-18',
+      occurrenceDate: '2026-06-19',
+      endDate: '2026-06-20',
+      progressPercent: 75,
+      status: 'completed',
+      progressEntryId: 'progress-19',
+    });
+    mocks.updateTask.mockResolvedValue(baseTask({
+      ...firstOccurrence,
+      title: '新标题',
+      updatedAt: '2026-06-18T02:00:00.000Z',
+      syncStatus: 'pending',
+      version: 2,
+      postponementHistory: history,
+    }));
+    useTaskStore.setState({
+      tasks: [firstOccurrence, secondOccurrence],
+      tasksByDate: {
+        '2026-06-18': [firstOccurrence],
+        '2026-06-19': [secondOccurrence],
+      },
+      visibleDates: ['2026-06-18', '2026-06-19', '2026-06-20'],
+      visibleStartDate: '2026-06-18',
+      selectedDate: '2026-06-18',
+    });
+
+    await useTaskStore.getState().updateTask('task-1', { title: '新标题' });
+
+    const updatedFirst = useTaskStore.getState().tasksByDate['2026-06-18']?.[0];
+    const updatedSecond = useTaskStore.getState().tasksByDate['2026-06-19']?.[0];
+    expect(mocks.loadVisibleTasks).not.toHaveBeenCalled();
+    expect(updatedFirst?.title).toBe('新标题');
+    expect(updatedSecond?.title).toBe('新标题');
+    expect(updatedFirst?.progressPercent).toBe(25);
+    expect(updatedSecond?.progressPercent).toBe(75);
+    expect(updatedFirst?.status).toBe('active');
+    expect(updatedSecond?.status).toBe('completed');
+    expect(updatedFirst?.occurrenceDate).toBe('2026-06-18');
+    expect(updatedSecond?.occurrenceDate).toBe('2026-06-19');
+    expect(updatedFirst?.progressEntryId).toBe('progress-18');
+    expect(updatedSecond?.progressEntryId).toBe('progress-19');
+    expect(updatedFirst?.postponementHistory).toEqual(history);
+    expect(updatedSecond?.postponementHistory).toEqual(history);
   });
 
   it('advances from the latest visible state during rapid right navigation', async () => {
@@ -317,6 +394,38 @@ describe('task store date window behavior', () => {
 
     expect(mocks.completeTask).toHaveBeenCalledWith('daily-1', false, '2026-06-18');
     expect(useTaskStore.getState().tasksByDate['2026-06-18']?.[0]?.status).toBe('completed');
+  });
+
+  it('keeps postponement history after completing a postponed task', async () => {
+    const history = [taskPostponement()];
+    const task = baseTask({
+      id: 'task-1',
+      taskDate: '2026-06-20',
+      occurrenceDate: '2026-06-20',
+      postponedAt: '2026-06-18T01:00:00.000Z',
+      postponedFromDate: '2026-06-18',
+      postponedToDate: '2026-06-20',
+      postponementHistory: history,
+    });
+    mocks.completeTask.mockResolvedValue(baseTask({
+      ...task,
+      status: 'completed',
+      progressPercent: 100,
+      postponementHistory: history,
+    }));
+    useTaskStore.setState({
+      tasks: [task],
+      tasksByDate: { '2026-06-20': [task] },
+      selectedDate: '2026-06-20',
+      visibleDates: ['2026-06-20'],
+      visibleStartDate: '2026-06-20',
+    });
+
+    await useTaskStore.getState().completeTask('task-1', false);
+
+    const updated = useTaskStore.getState().tasksByDate['2026-06-20']?.[0];
+    expect(updated?.status).toBe('completed');
+    expect(updated?.postponementHistory).toEqual(history);
   });
 
   it('updates task progress in the current occurrence', async () => {

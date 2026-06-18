@@ -91,6 +91,56 @@ function mergeVisibleTask(tasks: TaskOccurrence[], task: TaskOccurrence, visible
   return [...withoutTask, task];
 }
 
+function mergeVisibleTaskDefinition(tasks: TaskOccurrence[], updated: TaskOccurrence): TaskOccurrence[] {
+  return tasks.map((task) => {
+    if (task.id !== updated.id) {
+      return task;
+    }
+
+    return {
+      ...task,
+      userId: updated.userId,
+      deviceId: updated.deviceId,
+      title: updated.title,
+      content: updated.content,
+      endDate: updated.endDate,
+      priority: updated.priority,
+      sourceType: updated.sourceType,
+      routineId: updated.routineId,
+      parentTaskId: updated.parentTaskId,
+      sortOrder: updated.sortOrder,
+      postponedAt: updated.postponedAt,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+      syncStatus: updated.syncStatus,
+      version: updated.version,
+      definitionTaskDate: updated.definitionTaskDate,
+      postponementHistory: updated.postponementHistory,
+    };
+  });
+}
+
+function applyDefinitionUpdateInput(tasks: TaskOccurrence[], id: string, input: UpdateTaskInput): TaskOccurrence[] {
+  const now = new Date().toISOString();
+
+  return tasks.map((task) => {
+    if (task.id !== id) {
+      return task;
+    }
+
+    return {
+      ...task,
+      title: input.title ?? task.title,
+      content: input.content === undefined ? task.content : input.content,
+      sortOrder: input.sortOrder ?? task.sortOrder,
+      postponedAt: input.postponedAt === undefined ? task.postponedAt : input.postponedAt,
+      updatedAt: now,
+      syncStatus: 'pending',
+      version: task.version + 1,
+    };
+  });
+}
+
 function removeTask(tasks: TaskOccurrence[], id: string): TaskOccurrence[] {
   return tasks.filter((task) => task.id !== id);
 }
@@ -192,20 +242,24 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const isScheduleUpdate = input.taskDate !== undefined || input.endDate !== undefined || input.sourceType !== undefined;
     const current = get().tasks.find((task) => task.id === id);
     if (current) {
-      const optimistic: TaskOccurrence = {
-        ...current,
-        ...input,
-        title: input.title ?? current.title,
-        content: input.content === undefined ? current.content : input.content,
-        taskDate: input.taskDate ?? current.taskDate,
-        endDate: input.endDate === undefined ? current.endDate : input.endDate,
-        sourceType: input.sourceType ?? current.sourceType,
-        postponedAt: input.postponedAt === undefined ? current.postponedAt : input.postponedAt,
-        updatedAt: new Date().toISOString(),
-        syncStatus: 'pending',
-        version: current.version + 1,
-      };
-      set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
+      if (isScheduleUpdate) {
+        const optimistic: TaskOccurrence = {
+          ...current,
+          ...input,
+          title: input.title ?? current.title,
+          content: input.content === undefined ? current.content : input.content,
+          taskDate: input.taskDate ?? current.taskDate,
+          endDate: input.endDate === undefined ? current.endDate : input.endDate,
+          sourceType: input.sourceType ?? current.sourceType,
+          postponedAt: input.postponedAt === undefined ? current.postponedAt : input.postponedAt,
+          updatedAt: new Date().toISOString(),
+          syncStatus: 'pending',
+          version: current.version + 1,
+        };
+        set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
+      } else {
+        set((state) => taskCollectionPatch(applyDefinitionUpdateInput(state.tasks, id, input)));
+      }
     }
 
     const updated = await taskService.updateTask(id, input);
@@ -220,7 +274,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return;
     }
 
-    set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
+    set((state) => taskCollectionPatch(mergeVisibleTaskDefinition(state.tasks, updated)));
   },
 
   async updateTaskProgress(id, progressDate, percent) {
