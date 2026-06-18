@@ -1019,6 +1019,110 @@ button {
   gap: 9px;
 }
 
+.about-panel {
+  grid-template-rows: auto auto auto auto auto 1fr;
+  gap: 12px;
+}
+
+.about-hero,
+.about-meta,
+.about-actions,
+.about-status {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.about-hero {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.about-hero div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.about-hero strong {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.about-hero span,
+.about-hero p,
+.about-meta,
+.about-status {
+  color: var(--muted);
+}
+
+.about-hero p,
+.about-status {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.about-meta {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.about-actions {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.about-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--accent);
+  color: rgb(var(--bg-rgb));
+  cursor: pointer;
+}
+
+.about-actions button.ghost {
+  background: transparent;
+  color: var(--text);
+}
+
+.about-actions button:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.about-status {
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.about-status.error {
+  color: var(--danger);
+}
+
+.about-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.about-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
 .panel-form-card {
   padding: 10px;
   border: 1px solid var(--line);

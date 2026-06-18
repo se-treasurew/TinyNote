@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarClock, ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
 import { ArchivePanel } from '../components/ArchivePanel';
+import { AboutPanel } from '../components/AboutPanel';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { TaskManagePanel } from '../components/TaskManagePanel';
 import { ConfirmContext } from '../components/ConfirmDialog';
@@ -31,6 +32,7 @@ export function MainPage() {
   const isArchiveOpen = useUiStore((state) => state.isArchiveOpen);
   const isSettingsOpen = useUiStore((state) => state.isSettingsOpen);
   const isTaskManageOpen = useUiStore((state) => state.isTaskManageOpen);
+  const isAboutOpen = useUiStore((state) => state.isAboutOpen);
   const selectedTasks = tasksByDate[selectedDate] ?? [];
   const activeTasks = selectedTasks.filter((task) => task.status === 'active');
   const doneTasks = selectedTasks.filter((task) => task.status === 'completed' || task.status === 'archived');
@@ -231,6 +233,7 @@ export function MainPage() {
       {isArchiveOpen && <ArchivePanel />}
       {isSettingsOpen && <SettingsPanel />}
       {isTaskManageOpen && <TaskManagePanel />}
+      {isAboutOpen && <AboutPanel />}
     </main>
   );
 }

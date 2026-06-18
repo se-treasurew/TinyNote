@@ -1,4 +1,4 @@
-import { Archive, ListTodo, Lock, Pin, PinOff, Settings, Unlock } from 'lucide-react';
+import { Archive, Info, ListTodo, Lock, Minus, Pin, PinOff, Settings, Unlock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -47,6 +47,9 @@ export function TitleBar() {
         <button type="button" title="归档" aria-label="归档" onClick={() => openPanel('archive')}>
           <Archive size={16} />
         </button>
+        <button type="button" title="关于 TinyNote" aria-label="关于 TinyNote" onClick={() => openPanel('about')}>
+          <Info size={16} />
+        </button>
         <button type="button" title="固定桌面" aria-label="固定桌面" onClick={() => void toggleLockWindow()}>
           {settings.lockWindow ? <Lock size={16} /> : <Unlock size={16} />}
         </button>
@@ -55,6 +58,9 @@ export function TitleBar() {
         </button>
         <button type="button" title="设置" aria-label="设置" onClick={() => openPanel('settings')}>
           <Settings size={16} />
+        </button>
+        <button type="button" title="最小化" aria-label="最小化" onClick={() => void windowService.minimizeWindow()}>
+          <Minus size={16} />
         </button>
       </nav>
     </header>

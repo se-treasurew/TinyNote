@@ -13,6 +13,21 @@ vi.mock('../services/windowService', () => ({
     applySettings: vi.fn(),
     readAutostart: vi.fn(async () => false),
     resetWindowBounds: vi.fn(),
+    minimizeWindow: vi.fn(async () => undefined),
+  },
+}));
+
+vi.mock('../services/appUpdateService', () => ({
+  appUpdateService: {
+    getAboutInfo: vi.fn(async () => ({
+      productName: 'TinyNote',
+      displayName: '小笺',
+      version: '1.0.0',
+      githubUrl: 'https://github.com/se-treasurew/TinyNote',
+    })),
+    openGitHub: vi.fn(async () => undefined),
+    checkForUpdate: vi.fn(async () => null),
+    installUpdate: vi.fn(async () => undefined),
   },
 }));
 
@@ -86,6 +101,8 @@ describe('MainPage display layout', () => {
       currentPanel: 'main',
       isArchiveOpen: false,
       isSettingsOpen: false,
+      isTaskManageOpen: false,
+      isAboutOpen: false,
     });
   });
 
@@ -189,5 +206,14 @@ describe('MainPage display layout', () => {
     render(<MainPage />);
 
     expect(screen.getByRole('button', { name: '顺延' })).toBeDisabled();
+  });
+
+  it('opens the about panel from the title bar', async () => {
+    render(<MainPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '关于 TinyNote' }));
+
+    expect(await screen.findByRole('complementary', { name: '关于 TinyNote' })).toBeInTheDocument();
+    expect(screen.getByText('当前版本 v1.0.0')).toBeInTheDocument();
   });
 });

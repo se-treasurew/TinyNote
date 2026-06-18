@@ -24,6 +24,10 @@ export const windowService = {
     }
   },
 
+  async minimizeWindow(): Promise<void> {
+    await getCurrentWindow().minimize();
+  },
+
   async setAutostart(enabled: boolean): Promise<void> {
     if (enabled) {
       await enable();
