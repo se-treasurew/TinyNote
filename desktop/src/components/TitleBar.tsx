@@ -1,4 +1,6 @@
 import { Archive, ListTodo, Lock, Pin, PinOff, Settings, Unlock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUiStore } from '../stores/uiStore';
 import { windowService } from '../services/windowService';
@@ -8,6 +10,24 @@ export function TitleBar() {
   const toggleLockWindow = useSettingsStore((state) => state.toggleLockWindow);
   const toggleTopmost = useSettingsStore((state) => state.toggleTopmost);
   const openPanel = useUiStore((state) => state.openPanel);
+  const [appVersion, setAppVersion] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    // getVersion reads from tauri.conf.json at runtime, so the title bar never
+    // holds a hardcoded version that drifts from the configured one. Guarded so
+    // non-Tauri environments (tests, browser) don't throw.
+    getVersion()
+      .then((version) => {
+        if (active) setAppVersion(version);
+      })
+      .catch(() => {
+        if (active) setAppVersion('');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <header
@@ -18,7 +38,7 @@ export function TitleBar() {
     >
       <div className="title-copy">
         <strong>小笺</strong>
-        <span>v0.1.11</span>
+        {appVersion && <span>v{appVersion}</span>}
       </div>
       <nav className="title-actions" onMouseDown={(event) => event.stopPropagation()}>
         <button type="button" title="任务管理" aria-label="任务管理" onClick={() => openPanel('taskManage')}>

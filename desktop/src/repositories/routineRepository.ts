@@ -134,6 +134,19 @@ export class RoutineRepository {
       routineInstanceToParams(instance),
     );
   }
+
+  /**
+   * Removes the routine_instances row tied to a task. Called when a
+   * routine-generated task is deleted so the instance can be regenerated
+   * later instead of being permanently blocked by the UNIQUE(routine_id,
+   * instance_date) guard in insertGeneratedTask.
+   */
+  async deleteInstanceByTaskId(taskId: string): Promise<void> {
+    await executeWrite(
+      `DELETE FROM routine_instances WHERE task_id = $1`,
+      [taskId],
+    );
+  }
 }
 
 export function mapRoutineRow(row: RoutineRow): Routine {

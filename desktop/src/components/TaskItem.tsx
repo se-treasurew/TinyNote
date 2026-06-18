@@ -1,10 +1,11 @@
 import { Archive, CalendarClock, CalendarDays, Check, Info, MoreHorizontal, Save, Trash2, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import type { TaskOccurrence, TaskSourceType } from '../types/task';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
-import { addDays } from '../utils/date';
+import { addDays, todayIsoDate } from '../utils/date';
 import { isPostponeEligibleTask } from '../services/taskScheduling';
+import { ConfirmContext } from './ConfirmDialog';
 
 interface TaskItemProps {
   task: TaskOccurrence;
@@ -21,6 +22,7 @@ export function TaskItem({ task }: TaskItemProps) {
   const [postponeToDate, setPostponeToDate] = useState(addDays(task.occurrenceDate, 1));
   const [progress, setProgress] = useState(task.progressPercent);
   const menuRef = useRef<HTMLDivElement>(null);
+  const confirm = useContext(ConfirmContext);
   const settings = useSettingsStore((state) => state.settings);
   const completeTask = useTaskStore((state) => state.completeTask);
   const updateTask = useTaskStore((state) => state.updateTask);
@@ -30,6 +32,10 @@ export function TaskItem({ task }: TaskItemProps) {
   const restoreTask = useTaskStore((state) => state.restoreTask);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const isDone = task.status === 'completed' || task.status === 'archived';
+  // A task is overdue when its occurrence date has passed and it's still
+  // active. Suppressed when the task was already postponed (the 延期 tag
+  // already signals the situation) to avoid showing both at once.
+  const isOverdue = task.status === 'active' && !task.postponedAt && task.occurrenceDate < todayIsoDate();
   const canPostpone = isPostponeEligibleTask(task, task.occurrenceDate) && postponeToDate > task.occurrenceDate;
   const postponeButtonLabel = `确认延期到 ${postponeToDate}`;
   const scheduleEndDate = draftSourceType === 'manual' ? null : draftEndDate;
@@ -149,6 +155,19 @@ export function TaskItem({ task }: TaskItemProps) {
     setIsMenuOpen(false);
   }
 
+  async function confirmDelete() {
+    const ok = await confirm?.({
+      title: '删除任务',
+      message: `确定要删除「${task.title}」吗？`,
+      confirmLabel: '删除',
+      danger: true,
+    });
+    if (ok) {
+      closeMenu();
+      await deleteTask(task.id);
+    }
+  }
+
   return (
     <div
       className={`task-item ${isDone ? 'completed' : ''}`}
@@ -190,9 +209,10 @@ export function TaskItem({ task }: TaskItemProps) {
           <div className="task-tags">
             {task.sourceType === 'manual' && <span className="tag-manual">普通</span>}
             {task.sourceType === 'daily' && <span className="tag-daily">每日</span>}
-            {task.sourceType === 'multi_day' && <span className="tag-multi">长期</span>}
+            {task.sourceType === 'multi_day' && <span className="tag-multi">多日</span>}
             {task.status === 'archived' && <span className="tag-archived">归档</span>}
             {task.postponedAt && <span className="tag-postponed">延期</span>}
+            {isOverdue && <span className="tag-overdue">过期</span>}
           </div>
           {task.status === 'active' && (
             <div className="task-progress">
@@ -249,7 +269,7 @@ export function TaskItem({ task }: TaskItemProps) {
                 <span>归档</span>
               </button>
             )}
-            <button type="button" onClick={() => { closeMenu(); void deleteTask(task.id); }}>
+            <button type="button" onClick={() => { void confirmDelete(); }}>
               <Trash2 size={14} />
               <span>删除</span>
             </button>
@@ -370,7 +390,7 @@ function TaskDetailDialog({
                   >
                     <option value="manual">普通</option>
                     <option value="daily">每日</option>
-                    <option value="multi_day">长期</option>
+                    <option value="multi_day">多日</option>
                   </select>
                 </label>
                 <label>
@@ -419,7 +439,7 @@ function formatDateTime(value: string): string {
 
 function formatSourceType(sourceType: TaskSourceType): string {
   if (sourceType === 'daily') return '每日';
-  if (sourceType === 'multi_day') return '长期';
+  if (sourceType === 'multi_day') return '多日';
   return '普通';
 }
 

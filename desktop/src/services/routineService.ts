@@ -64,7 +64,8 @@ export class RoutineService {
 
   async setEnabled(id: string, isEnabled: boolean): Promise<Routine> {
     const routines = await routineRepository.listRoutines(true);
-    const routine = routines.find((item) => item.id === id);
+    // Exclude soft-deleted routines so enabling cannot revive one that was deleted.
+    const routine = routines.find((item) => item.id === id && !item.deletedAt);
     if (!routine) {
       throw new Error(`Routine not found: ${id}`);
     }

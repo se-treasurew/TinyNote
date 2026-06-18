@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { initializeDatabase } from '../repositories/db';
+import { ConfirmProvider } from '../components/ConfirmDialog';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
 import { useUiStore } from '../stores/uiStore';
@@ -67,5 +68,9 @@ export function App() {
     );
   }
 
-  return <MainPage />;
+  return (
+    <ConfirmProvider>
+      <MainPage />
+    </ConfirmProvider>
+  );
 }

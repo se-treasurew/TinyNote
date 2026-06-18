@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarClock, ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
 import { ArchivePanel } from '../components/ArchivePanel';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { TaskManagePanel } from '../components/TaskManagePanel';
+import { ConfirmContext } from '../components/ConfirmDialog';
 import { TaskItem } from '../components/TaskItem';
 import { TitleBar } from '../components/TitleBar';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -14,6 +15,7 @@ import { isBatchPostponeEligibleTask } from '../services/taskScheduling';
 export function MainPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
+  const confirm = useContext(ConfirmContext);
   const settings = useSettingsStore((state) => state.settings);
   const tasks = useTaskStore((state) => state.tasks);
   const tasksByDate = useTaskStore((state) => state.tasksByDate);
@@ -44,6 +46,7 @@ export function MainPage() {
   }, [tasks]);
 
   const dateStripRef = useRef<HTMLDivElement>(null);
+  const todayIso = todayIsoDate();
 
   useEffect(() => {
     void loadTasks(settings.visibleDays);
@@ -83,8 +86,25 @@ export function MainPage() {
   }
 
   async function clearCompletedTasks() {
-    for (const task of doneTasks) {
-      await deleteTask(task.id);
+    if (doneTasks.length === 0) {
+      return;
+    }
+    const ok = await confirm?.({
+      title: '清空已完成',
+      message: `将删除 ${doneTasks.length} 个已完成/归档任务，确定吗？`,
+      confirmLabel: '清空',
+      danger: true,
+    });
+    if (!ok) {
+      return;
+    }
+    try {
+      for (const task of doneTasks) {
+        await deleteTask(task.id);
+      }
+    } catch (error) {
+      console.error('Failed to clear completed tasks', error);
+      await loadTasks(settings.visibleDays);
     }
   }
 
@@ -108,7 +128,7 @@ export function MainPage() {
               type="button"
               role="tab"
               data-date={date}
-              className={`date-tab ${selectedDate === date ? 'selected' : ''}`}
+              className={`date-tab ${selectedDate === date ? 'selected' : ''} ${date === todayIso ? 'is-today' : ''}`}
               aria-label={`${formatWeekdayLabel(date)} ${formatMonthDay(date)}`}
               aria-selected={selectedDate === date}
               onClick={() => {
@@ -145,7 +165,7 @@ export function MainPage() {
           {activeTasks.map((task) => (
             <TaskItem key={task.id} task={task} />
           ))}
-          {activeTasks.length === 0 && doneTasks.length === 0 && <p className="empty-copy">今日清爽</p>}
+          {activeTasks.length === 0 && <p className="empty-copy">暂无待办</p>}
         </div>
         {doneTasks.length > 0 && (
           <section className="completed-section" aria-label="已完成任务">
@@ -205,7 +225,7 @@ export function MainPage() {
           onClick={() => void clearCompletedTasks()}
         >
           <Trash2 size={18} />
-          <span>清空</span>
+          <span>清空已完成</span>
         </button>
       </section>
       {isArchiveOpen && <ArchivePanel />}

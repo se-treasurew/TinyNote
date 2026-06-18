@@ -29,7 +29,11 @@ export class TaskRepository {
        FROM tasks
        WHERE status != 'deleted'
          AND (
-           (source_type = 'manual' AND task_date <= $2)
+           -- Manual tasks only show on their own date, so bound both sides.
+           (source_type = 'manual' AND task_date >= $1 AND task_date <= $2)
+           -- Daily/multi-day tasks span a range. Daily tasks with no end_date
+           -- stay active indefinitely by design, so they remain unbounded on
+           -- the lower side; multi-day tasks are bounded by end_date >= $1.
            OR (source_type IN ('daily', 'multi_day') AND task_date <= $2 AND (end_date IS NULL OR end_date >= $1))
          )
        ORDER BY task_date ASC, sort_order ASC, created_at ASC`,

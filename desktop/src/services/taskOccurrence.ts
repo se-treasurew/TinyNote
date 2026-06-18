@@ -1,3 +1,4 @@
+import { todayIsoDate } from '../utils/date';
 import type { Task, TaskOccurrence, TaskPostponement, TaskProgressEntry, TaskStatus } from '../types/task';
 
 interface BuildTaskOccurrencesInput {
@@ -5,11 +6,14 @@ interface BuildTaskOccurrencesInput {
   progressEntries: TaskProgressEntry[];
   postponements: TaskPostponement[];
   visibleDates: string[];
+  /** ISO date treated as "today" for the carry-forward guard. Defaults to now. */
+  today?: string;
 }
 
 export function buildTaskOccurrences(input: BuildTaskOccurrencesInput): TaskOccurrence[] {
   const entriesByTask = groupProgressEntries(input.progressEntries);
   const postponementsByTask = groupPostponements(input.postponements);
+  const today = input.today ?? todayIsoDate();
 
   return input.tasks
     .filter((task) => task.status !== 'deleted')
@@ -17,7 +21,7 @@ export function buildTaskOccurrences(input: BuildTaskOccurrencesInput): TaskOccu
       const entries = entriesByTask.get(task.id) ?? [];
       const taskPostponements = postponementsByTask.get(task.id) ?? [];
       return visibleTaskDates(task, taskPostponements, input.visibleDates)
-        .map((date) => buildOccurrence(task, date, entries, taskPostponements));
+        .map((date) => buildOccurrence(task, date, entries, taskPostponements, today));
     })
     .filter((task) => task.status !== 'deleted')
     .sort((a, b) => a.taskDate.localeCompare(b.taskDate) || a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt));
@@ -60,9 +64,10 @@ function buildOccurrence(
   date: string,
   entries: TaskProgressEntry[],
   postponements: TaskPostponement[],
+  today: string,
 ): TaskOccurrence {
   const directEntry = entries.find((entry) => entry.progressDate === date);
-  const inheritedEntry = directEntry ?? resolveInheritedProgressEntry(task, date, entries);
+  const inheritedEntry = directEntry ?? resolveInheritedProgressEntry(task, date, entries, today);
   const status = resolveOccurrenceStatus(task, directEntry);
   const activePostponements = postponements.filter((postponement) => !postponement.deletedAt);
   const occurrencePostponement = resolveOccurrencePostponement(activePostponements, date);
@@ -89,8 +94,16 @@ function resolveInheritedProgressEntry(
   task: Task,
   date: string,
   entries: TaskProgressEntry[],
+  today: string,
 ): TaskProgressEntry | undefined {
   if (task.sourceType !== 'multi_day') {
+    return undefined;
+  }
+
+  // Multi-day progress carries forward to "today and before" only — never onto
+  // future dates. A future day hasn't happened yet, so it shows no carried
+  // progress until the day arrives.
+  if (date > today) {
     return undefined;
   }
 

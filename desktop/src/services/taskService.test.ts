@@ -129,6 +129,7 @@ describe('task service occurrence and progress behavior', () => {
     expect(mocks.listByDateRange).toHaveBeenCalledWith('2026-06-16', '2026-06-18');
     expect(mocks.listProgressEntries).toHaveBeenCalledWith(['task-1'], '2026-06-18');
     expect(mocks.listPostponements).toHaveBeenCalledWith(['task-1']);
+    // Multi-day progress carries forward to today-and-before (today is 2026-06-18).
     expect(occurrences.map((item) => [item.taskDate, item.progressPercent])).toEqual([
       ['2026-06-16', 55],
       ['2026-06-17', 55],
@@ -203,6 +204,25 @@ describe('task service occurrence and progress behavior', () => {
     }));
     expect(occurrence.status).toBe('completed');
     expect(occurrence.taskDate).toBe('2026-06-18');
+  });
+
+  it('preserves existing target-date progress instead of overwriting it on postpone', async () => {
+    const task = baseTask({ sourceType: 'manual', taskDate: '2026-06-18' });
+    mocks.findById.mockResolvedValue(task);
+    // first findProgressEntry -> source date progress (45); second -> target date
+    // already has 75% which must NOT be clobbered by the source date's 45%.
+    mocks.findProgressEntry
+      .mockResolvedValueOnce(progressEntry({ progressDate: '2026-06-18', percent: 45 }))
+      .mockResolvedValueOnce(progressEntry({ id: 'existing-target', progressDate: '2026-06-20', percent: 75 }));
+
+    await taskService.postponeTask('task-1', '2026-06-18', '2026-06-20');
+
+    expect(mocks.upsertProgressEntry).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      progressDate: '2026-06-20',
+      percent: 75,
+      status: 'active',
+    }));
   });
 
   it('postpones a manual task without removing the original date and copies direct progress', async () => {

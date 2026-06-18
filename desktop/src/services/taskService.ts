@@ -1,4 +1,5 @@
 import { TaskRepository } from '../repositories/taskRepository';
+import { RoutineRepository } from '../repositories/routineRepository';
 import type { CreateTaskInput, Task, TaskDraft, TaskOccurrence, TaskPostponement, TaskProgressEntry, UpdateTaskInput } from '../types/task';
 import { getVisibleDateRange } from '../utils/date';
 import { getDeviceId, createId } from '../utils/id';
@@ -9,9 +10,13 @@ import { buildTaskOccurrences, clampProgressPercent } from './taskOccurrence';
 import { isPostponeEligibleTask } from './taskScheduling';
 
 const taskRepository = new TaskRepository();
+const routineRepository = new RoutineRepository();
 
 export class TaskService {
-  async loadVisibleTasks(startDate: string, visibleDays: number): Promise<TaskOccurrence[]> {
+  async loadVisibleTasks(
+    startDate: string,
+    visibleDays: number,
+  ): Promise<TaskOccurrence[]> {
     const dates = getVisibleDateRange(startDate, visibleDays);
     const endDate = dates[dates.length - 1] ?? startDate;
     const tasks = await taskRepository.listByDateRange(startDate, endDate);
@@ -157,7 +162,10 @@ export class TaskService {
       existing: existingNextEntry,
       taskId: id,
       progressDate: toDate,
-      percent: sourcePercent,
+      // Preserve the target date's existing progress instead of overwriting it
+      // with the source date's value. Fall back to the carried source progress
+      // only when the target date has no prior progress entry.
+      percent: existingNextEntry?.percent ?? sourcePercent,
       status: 'active',
       now,
     });
@@ -203,6 +211,10 @@ export class TaskService {
     const task = await this.requireTask(id);
     const updated = applyDelete(task, new Date().toISOString());
     await taskRepository.save(updated);
+    // Free the routine instance slot so the task can be regenerated later.
+    if (task.routineId) {
+      await routineRepository.deleteInstanceByTaskId(id);
+    }
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'delete', payload: updated });
     return taskToOccurrence(updated, updated.taskDate, [], []);
   }

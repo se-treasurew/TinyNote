@@ -422,6 +422,11 @@ button {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
+.date-tab.is-today strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .date-tab i {
   position: absolute;
   bottom: 7px;
@@ -1238,5 +1243,72 @@ button {
   border-radius: 18px;
   clip-path: inset(0 round 18px);
   background: var(--bg);
+  color: var(--text);
+}
+
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.confirm-dialog {
+  display: grid;
+  gap: 10px;
+  width: min(320px, 100%);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+
+.confirm-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.confirm-message {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.confirm-actions button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--accent);
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.confirm-actions button.ghost {
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.confirm-actions button.danger {
+  background: var(--danger);
+}
+
+.confirm-actions button.ghost:hover {
   color: var(--text);
 }

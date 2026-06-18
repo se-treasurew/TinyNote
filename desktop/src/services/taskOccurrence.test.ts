@@ -84,10 +84,12 @@ describe('task occurrences', () => {
       postponements: [],
       visibleDates: ['2026-06-15', '2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19'],
     });
+    // today is 2026-06-17: 06-16 inherits (past), 06-17 inherits (today),
+    // 06-18 is future -> no carry -> 0.
     expect(withoutCarry.map((item) => [item.taskDate, item.progressPercent])).toEqual([
       ['2026-06-16', 35],
       ['2026-06-17', 35],
-      ['2026-06-18', 35],
+      ['2026-06-18', 0],
     ]);
   });
 
@@ -103,11 +105,13 @@ describe('task occurrences', () => {
       postponements: [],
       visibleDates: ['2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19'],
     });
+    // today is 2026-06-17: 06-16 direct 35, 06-17 inherits 35 (today),
+    // 06-18 direct 60, 06-19 is future -> no carry -> 0.
     expect(occurrences.map((item) => [item.taskDate, item.progressPercent])).toEqual([
       ['2026-06-16', 35],
       ['2026-06-17', 35],
       ['2026-06-18', 60],
-      ['2026-06-19', 60],
+      ['2026-06-19', 0],
     ]);
   });
 

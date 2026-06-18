@@ -69,7 +69,9 @@ function scheduleNavigationLoad(load: () => Promise<void>) {
   cancelPendingNavigationLoad();
   pendingNavigationLoad = setTimeout(() => {
     pendingNavigationLoad = undefined;
-    load().catch(() => { /* error already handled in loadTasks */ });
+    load().catch((error) => {
+      console.error('Scheduled navigation load failed', error);
+    });
   }, NAVIGATION_LOAD_DELAY_MS);
 }
 
@@ -163,6 +165,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   async goToToday(visibleDays = get().visibleDays) {
+    invalidatePendingLoads();
+    set({ isLoading: false });
     const today = todayIsoDate();
     const startDate = resolveVisibleStartForDate(today, get().visibleStartDate, visibleDays);
     await get().loadTasks(visibleDays, startDate, today);

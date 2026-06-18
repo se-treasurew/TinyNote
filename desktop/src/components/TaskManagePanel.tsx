@@ -1,10 +1,11 @@
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { useTaskStore } from '../stores/taskStore';
 import { taskService } from '../services/taskService';
 import type { Task, TaskSourceType } from '../types/task';
 import { todayIsoDate } from '../utils/date';
+import { ConfirmContext } from './ConfirmDialog';
 
 export function TaskManagePanel() {
   const closePanel = useUiStore((state) => state.closePanel);
@@ -12,6 +13,7 @@ export function TaskManagePanel() {
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const updateTask = useTaskStore((state) => state.updateTask);
   const loadTasks = useTaskStore((state) => state.loadTasks);
+  const confirm = useContext(ConfirmContext);
   const [mode, setMode] = useState<TaskSourceType>('daily');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -62,7 +64,16 @@ export function TaskManagePanel() {
     await loadTasks();
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, title: string) {
+    const ok = await confirm?.({
+      title: '删除任务',
+      message: `确定要删除「${title}」吗？`,
+      confirmLabel: '删除',
+      danger: true,
+    });
+    if (!ok) {
+      return;
+    }
     await deleteTask(id);
     await refresh();
   }
@@ -215,7 +226,7 @@ export function TaskManagePanel() {
                 <button type="button" aria-label="编辑" onClick={() => startEdit(task)}>
                   <Pencil size={15} />
                 </button>
-                <button type="button" aria-label="删除" onClick={() => void handleDelete(task.id)}>
+                <button type="button" aria-label="删除" onClick={() => void handleDelete(task.id, task.title)}>
                   <Trash2 size={15} />
                 </button>
               </>
