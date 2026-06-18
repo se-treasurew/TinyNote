@@ -7,7 +7,7 @@ describe('GitHub release workflow', () => {
     const workflow = readFileSync(resolve(process.cwd(), '../.github/workflows/release.yml'), 'utf8');
 
     expect(workflow).toContain('windows-latest');
-    expect(workflow).toContain('tauri-apps/tauri-action@v1');
+    expect(workflow).toContain('tauri-apps/tauri-action@v0.6.2');
     expect(workflow).toContain('projectPath: desktop');
     expect(workflow).toContain('uploadUpdaterJson: true');
     expect(workflow).toContain('updaterJsonPreferNsis: true');
