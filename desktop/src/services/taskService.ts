@@ -4,7 +4,7 @@ import type { CreateTaskInput, Task, TaskDraft, TaskOccurrence, TaskPostponement
 import { getVisibleDateRange } from '../utils/date';
 import { getDeviceId, createId } from '../utils/id';
 import { normalizeTitle } from '../utils/format';
-import { applyArchive, applyComplete, applyDelete, applyRestore, groupActiveTasksByDate } from './taskWorkflow';
+import { applyComplete, applyDelete, applyRestore, groupActiveTasksByDate } from './taskWorkflow';
 import { writeSyncLog } from './syncLogService';
 import { buildTaskOccurrences, clampProgressPercent } from './taskOccurrence';
 import { isPostponeEligibleTask } from './taskScheduling';
@@ -31,10 +31,6 @@ export class TaskService {
       postponements,
       visibleDates: dates,
     });
-  }
-
-  async loadArchive(): Promise<Task[]> {
-    return taskRepository.listArchive();
   }
 
   async loadAll(): Promise<Task[]> {
@@ -175,24 +171,42 @@ export class TaskService {
     return taskToOccurrence(updated, toDate, [nextEntry], [postponement]);
   }
 
-  async completeTask(id: string, completeToArchive: boolean, occurrenceDate?: string): Promise<TaskOccurrence> {
+  async clearTaskPostponements(id: string): Promise<TaskOccurrence> {
     const task = await this.requireTask(id);
-    if (task.sourceType !== 'manual') {
-      return this.updateOccurrenceStatus(task, occurrenceDate ?? task.taskDate, completeToArchive ? 'archived' : 'completed');
+    const now = new Date().toISOString();
+    const updated: Task = {
+      ...task,
+      postponedAt: null,
+      updatedAt: now,
+      syncStatus: 'pending',
+      version: task.version + 1,
+    };
+
+    await taskRepository.save(updated);
+    const deletedPostponements = await taskRepository.softDeletePostponements(id, now);
+    await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
+    for (const postponement of deletedPostponements) {
+      await writeSyncLog({
+        entityType: 'task_postponement',
+        entityId: postponement.id,
+        operation: 'delete',
+        payload: postponement,
+      });
     }
 
-    const updated = applyComplete(task, completeToArchive, new Date().toISOString());
+    return taskToOccurrence(updated, updated.taskDate, [], []);
+  }
+
+  async completeTask(id: string, occurrenceDate?: string): Promise<TaskOccurrence> {
+    const task = await this.requireTask(id);
+    if (task.sourceType !== 'manual') {
+      return this.updateOccurrenceStatus(task, occurrenceDate ?? task.taskDate, 'completed');
+    }
+
+    const updated = applyComplete(task, new Date().toISOString());
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
     return this.taskToOccurrenceWithHistory(updated, occurrenceDate ?? updated.taskDate);
-  }
-
-  async archiveTask(id: string): Promise<TaskOccurrence> {
-    const task = await this.requireTask(id);
-    const updated = applyArchive(task, new Date().toISOString());
-    await taskRepository.save(updated);
-    await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
-    return this.taskToOccurrenceWithHistory(updated, updated.taskDate);
   }
 
   async restoreTask(id: string, occurrenceDate?: string): Promise<TaskOccurrence> {

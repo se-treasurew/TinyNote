@@ -1,7 +1,7 @@
 import { RoutineRepository } from '../repositories/routineRepository';
 import { SettingsRepository } from '../repositories/settingsRepository';
 import { TaskRepository } from '../repositories/taskRepository';
-import type { AppSettings } from '../types/settings';
+import { defaultSettings, type AppSettings, type AppSettingKey } from '../types/settings';
 import type { Routine } from '../types/routine';
 import type { Task, TaskPostponement, TaskProgressEntry } from '../types/task';
 import { chooseMergedRecord, createExportPayload, type TinyNoteExport, type TinyNoteImport } from './syncService';
@@ -68,7 +68,8 @@ export const dataPortabilityService = {
     if (payload.schemaVersion === 2) {
       for (const incoming of payload.taskProgressEntries) {
         const local = localProgressMap.get(incoming.id);
-        const merged = local ? chooseMergedRecord(local, incoming) : incoming;
+        const normalized = normalizeImportedProgressEntry(incoming);
+        const merged = local ? chooseMergedRecord(local, normalized) : normalized;
         await taskRepository.upsertProgressEntry(merged);
         await writeSyncLog({ entityType: 'task_progress', entityId: merged.id, operation: 'import', payload: merged });
       }
@@ -77,7 +78,8 @@ export const dataPortabilityService = {
     if (payload.schemaVersion === 3) {
       for (const incoming of payload.taskProgressEntries) {
         const local = localProgressMap.get(incoming.id);
-        const merged = local ? chooseMergedRecord(local, incoming) : incoming;
+        const normalized = normalizeImportedProgressEntry(incoming);
+        const merged = local ? chooseMergedRecord(local, normalized) : normalized;
         await taskRepository.upsertProgressEntry(merged);
         await writeSyncLog({ entityType: 'task_progress', entityId: merged.id, operation: 'import', payload: merged });
       }
@@ -91,7 +93,7 @@ export const dataPortabilityService = {
       }
     }
 
-    await settingsRepository.setMany(payload.settings);
+    await settingsRepository.setMany(normalizeImportedSettings(payload.settings));
   },
 };
 
@@ -114,7 +116,25 @@ function normalizeImportedTask(task: Task): Task {
     endDate: task.endDate ?? null,
     postponedAt: task.postponedAt ?? null,
     sourceType: sourceType === 'routine_daily' ? 'daily' : task.sourceType,
+    status: task.status === 'archived' ? 'completed' : task.status,
+    archivedAt: task.status === 'archived' ? null : task.archivedAt,
   } as Task;
+}
+
+function normalizeImportedProgressEntry(entry: TaskProgressEntry): TaskProgressEntry {
+  return entry.status === 'archived'
+    ? { ...entry, status: 'completed', archivedAt: null }
+    : entry;
+}
+
+function normalizeImportedSettings(settings: AppSettings): AppSettings {
+  const normalized = { ...defaultSettings };
+  for (const key of Object.keys(defaultSettings) as AppSettingKey[]) {
+    if (settings[key] !== undefined) {
+      normalized[key] = settings[key] as never;
+    }
+  }
+  return normalized;
 }
 
 function routineAsSyncable(routine: Routine): Routine & { status?: string } {

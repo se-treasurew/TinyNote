@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyArchive,
   applyComplete,
   applyDelete,
   applyRestore,
@@ -37,7 +36,7 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
 
 describe('task workflow rules', () => {
   it('completes active tasks without triggering archive by default', () => {
-    const task = applyComplete(baseTask(), false, '2026-06-16T01:00:00.000Z');
+    const task = applyComplete(baseTask(), '2026-06-16T01:00:00.000Z');
 
     expect(task.status).toBe('completed');
     expect(task.completedAt).toBe('2026-06-16T01:00:00.000Z');
@@ -45,20 +44,9 @@ describe('task workflow rules', () => {
     expect(task.version).toBe(2);
   });
 
-  it('archives immediately when the setting is enabled', () => {
-    const task = applyComplete(baseTask(), true, '2026-06-16T01:00:00.000Z');
-
-    expect(task.status).toBe('archived');
-    expect(task.completedAt).toBe('2026-06-16T01:00:00.000Z');
-    expect(task.archivedAt).toBe('2026-06-16T01:00:00.000Z');
-  });
-
-  it('archives, restores, and soft deletes without physical removal', () => {
-    const archived = applyArchive(baseTask(), '2026-06-16T02:00:00.000Z');
-    expect(archived.status).toBe('archived');
-    expect(archived.archivedAt).toBe('2026-06-16T02:00:00.000Z');
-
-    const restored = applyRestore(archived, '2026-06-16T03:00:00.000Z');
+  it('restores completed tasks and soft deletes without physical removal', () => {
+    const completed = applyComplete(baseTask(), '2026-06-16T02:00:00.000Z');
+    const restored = applyRestore(completed, '2026-06-16T03:00:00.000Z');
     expect(restored.status).toBe('active');
     expect(restored.completedAt).toBeNull();
     expect(restored.archivedAt).toBeNull();

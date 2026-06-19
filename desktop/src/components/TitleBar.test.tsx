@@ -25,7 +25,7 @@ vi.mock('../services/windowService', () => ({
 describe('TitleBar utility actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getVersion.mockResolvedValue('1.0.0');
+    mocks.getVersion.mockResolvedValue('1.0.1');
     mocks.minimizeWindow.mockResolvedValue(undefined);
     useSettingsStore.setState({
       settings: defaultSettings,
@@ -34,7 +34,6 @@ describe('TitleBar utility actions', () => {
     });
     useUiStore.setState({
       currentPanel: 'main',
-      isArchiveOpen: false,
       isSettingsOpen: false,
       isTaskManageOpen: false,
       isAboutOpen: false,
@@ -43,20 +42,22 @@ describe('TitleBar utility actions', () => {
     });
   });
 
-  it('opens the about panel from the information button', async () => {
+  it('opens the about panel from the product name without separate info or archive buttons', async () => {
     render(<TitleBar />);
 
     fireEvent.click(screen.getByRole('button', { name: '关于 TinyNote' }));
 
     expect(useUiStore.getState().currentPanel).toBe('about');
+    expect(document.querySelector('.title-actions button[aria-label="关于 TinyNote"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: '归档' })).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText('v1.0.0')).toBeInTheDocument();
+      expect(screen.getByText('v1.0.1')).toBeInTheDocument();
     });
   });
 
   it('minimizes the current window from the title bar', async () => {
     render(<TitleBar />);
-    await screen.findByText('v1.0.0');
+    await screen.findByText('v1.0.1');
 
     fireEvent.click(screen.getByRole('button', { name: '最小化' }));
 

@@ -1,4 +1,4 @@
-import { Archive, Info, ListTodo, Lock, Minus, Pin, PinOff, Settings, Unlock } from 'lucide-react';
+import { ListTodo, Lock, Minus, Pin, PinOff, Settings, Unlock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -36,19 +36,20 @@ export function TitleBar() {
         void windowService.startDragIfUnlocked(settings.lockWindow);
       }}
     >
-      <div className="title-copy">
+      <button
+        type="button"
+        className="title-copy"
+        title="关于 TinyNote"
+        aria-label="关于 TinyNote"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={() => openPanel('about')}
+      >
         <strong>小笺</strong>
         {appVersion && <span>v{appVersion}</span>}
-      </div>
+      </button>
       <nav className="title-actions" onMouseDown={(event) => event.stopPropagation()}>
         <button type="button" title="任务管理" aria-label="任务管理" onClick={() => openPanel('taskManage')}>
           <ListTodo size={16} />
-        </button>
-        <button type="button" title="归档" aria-label="归档" onClick={() => openPanel('archive')}>
-          <Archive size={16} />
-        </button>
-        <button type="button" title="关于 TinyNote" aria-label="关于 TinyNote" onClick={() => openPanel('about')}>
-          <Info size={16} />
         </button>
         <button type="button" title="固定桌面" aria-label="固定桌面" onClick={() => void toggleLockWindow()}>
           {settings.lockWindow ? <Lock size={16} /> : <Unlock size={16} />}

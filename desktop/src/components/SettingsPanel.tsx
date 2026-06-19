@@ -85,14 +85,6 @@ export function SettingsPanel() {
           </select>
         </label>
         <label>
-          <span>完成归档</span>
-          <input
-            type="checkbox"
-            checked={settings.completeToArchive}
-            onChange={(event) => void updateSetting('completeToArchive', event.target.checked)}
-          />
-        </label>
-        <label>
           <span>开机启动</span>
           <input
             type="checkbox"

@@ -88,4 +88,10 @@ describe('SettingsPanel theme choices', () => {
 
     expect(screen.queryByLabelText('进度顺延')).not.toBeInTheDocument();
   });
+
+  it('does not show the removed complete-to-archive setting', () => {
+    render(<SettingsPanel />);
+
+    expect(screen.queryByText('完成归档')).not.toBeInTheDocument();
+  });
 });

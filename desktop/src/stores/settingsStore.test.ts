@@ -49,12 +49,12 @@ describe('settings store persistence behavior', () => {
     const save = deferred<AppSettings>();
     mocks.updateSetting.mockReturnValueOnce(save.promise);
 
-    const update = useSettingsStore.getState().updateSetting('completeToArchive', true);
+    const update = useSettingsStore.getState().updateSetting('showOnStartup', false);
 
-    expect(useSettingsStore.getState().settings.completeToArchive).toBe(true);
-    save.resolve({ ...defaultSettings, completeToArchive: true });
+    expect(useSettingsStore.getState().settings.showOnStartup).toBe(false);
+    save.resolve({ ...defaultSettings, showOnStartup: false });
     await update;
-    expect(useSettingsStore.getState().settings.completeToArchive).toBe(true);
+    expect(useSettingsStore.getState().settings.showOnStartup).toBe(false);
   });
 
   it('keeps the newest setting when an older save finishes later', async () => {

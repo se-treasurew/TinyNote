@@ -1,10 +1,9 @@
 import { create } from 'zustand';
-import type { CreateTaskInput, Task, TaskOccurrence, TasksByDate, UpdateTaskInput } from '../types/task';
+import type { CreateTaskInput, TaskOccurrence, TasksByDate, UpdateTaskInput } from '../types/task';
 import { taskService } from '../services/taskService';
 import { navigateDate as calculateDateNavigation, resolveVisibleStartForDate } from '../services/dateNavigation';
 import { isBatchPostponeEligibleTask } from '../services/taskScheduling';
 import {
-  applyArchive,
   applyComplete,
   applyRestore,
   getActiveCountByDate,
@@ -18,7 +17,6 @@ const NAVIGATION_LOAD_DELAY_MS = 120;
 
 interface TaskState {
   tasks: TaskOccurrence[];
-  archiveTasks: Task[];
   tasksByDate: TasksByDate;
   visibleDates: string[];
   visibleStartDate: string;
@@ -30,7 +28,6 @@ interface TaskState {
     startDate?: string,
     selectedDate?: string,
   ) => Promise<void>;
-  loadArchive: () => Promise<void>;
   navigateDate: (direction: -1 | 1, visibleDays?: number) => Promise<void>;
   goToToday: (visibleDays?: number) => Promise<void>;
   addTask: (input: CreateTaskInput) => Promise<TaskOccurrence>;
@@ -38,8 +35,8 @@ interface TaskState {
   updateTaskProgress: (id: string, progressDate: string, percent: number) => Promise<void>;
   postponeTask: (id: string, fromDate: string, toDate: string, sourceProgressPercent?: number) => Promise<void>;
   postponeTasksForDate: (date: string) => Promise<void>;
-  completeTask: (id: string, completeToArchive: boolean) => Promise<void>;
-  archiveTask: (id: string) => Promise<void>;
+  clearTaskPostponements: (id: string) => Promise<void>;
+  completeTask: (id: string) => Promise<void>;
   restoreTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   setSelectedDate: (date: string) => void;
@@ -156,7 +153,6 @@ function findCurrentOccurrence(tasks: TaskOccurrence[], id: string, selectedDate
 
 export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
-  archiveTasks: [],
   tasksByDate: {},
   visibleDates: getVisibleDateRange(todayIsoDate(), 7),
   visibleStartDate: todayIsoDate(),
@@ -192,11 +188,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       }
       throw error;
     }
-  },
-
-  async loadArchive() {
-    const archiveTasks = await taskService.loadArchive();
-    set({ archiveTasks });
   },
 
   async navigateDate(direction, visibleDays = get().visibleDays) {
@@ -331,38 +322,30 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  async completeTask(id, completeToArchive) {
+  async clearTaskPostponements(id) {
     invalidatePendingLoads();
     set({ isLoading: false });
-    const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
-    if (current) {
-      const optimistic = applyComplete(current, completeToArchive, new Date().toISOString());
-      set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
-    }
-
     try {
-      const updated = await taskService.completeTask(id, completeToArchive, current?.taskDate ?? get().selectedDate);
-      set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
-      void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
+      await taskService.clearTaskPostponements(id);
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
     }
   },
 
-  async archiveTask(id) {
+  async completeTask(id) {
     invalidatePendingLoads();
     set({ isLoading: false });
     const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
     if (current) {
-      const optimistic = applyArchive(current, new Date().toISOString());
+      const optimistic = applyComplete(current, new Date().toISOString());
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
     }
 
     try {
-      const updated = await taskService.archiveTask(id);
+      const updated = await taskService.completeTask(id, current?.taskDate ?? get().selectedDate);
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
-      void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
@@ -381,7 +364,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     try {
       const updated = await taskService.restoreTask(id, current?.taskDate ?? get().selectedDate);
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
-      void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
@@ -399,7 +381,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     try {
       await taskService.deleteTask(id);
       set((state) => taskCollectionPatch(removeTask(state.tasks, id)));
-      void get().loadArchive().catch((error) => console.error('Failed to load archive', error));
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;

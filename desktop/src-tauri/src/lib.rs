@@ -242,5 +242,25 @@ fn migrations() -> Vec<Migration> {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "replace_archive_with_completed",
+            sql: r#"
+            UPDATE tasks
+            SET status = 'completed',
+                completed_at = COALESCE(completed_at, archived_at, updated_at),
+                archived_at = NULL
+            WHERE status = 'archived';
+
+            UPDATE task_progress_entries
+            SET status = 'completed',
+                completed_at = COALESCE(completed_at, archived_at, updated_at),
+                archived_at = NULL
+            WHERE status = 'archived';
+
+            DELETE FROM app_settings WHERE key = 'completeToArchive';
+        "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -43,7 +43,6 @@ describe('TaskManagePanel', () => {
     vi.mocked(taskService.loadAll).mockResolvedValue([]);
     useUiStore.setState({
       currentPanel: 'taskManage',
-      isArchiveOpen: false,
       isSettingsOpen: false,
       isTaskManageOpen: true,
     });

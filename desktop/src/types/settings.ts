@@ -9,7 +9,6 @@ export type ThemeMode =
 
 export interface AppSettings {
   visibleDays: 3 | 7 | 14;
-  completeToArchive: boolean;
   autostart: boolean;
   showOnStartup: boolean;
   startMinimizedToTray: boolean;
@@ -31,7 +30,6 @@ export interface SettingRow {
 
 export const defaultSettings: AppSettings = {
   visibleDays: 7,
-  completeToArchive: false,
   autostart: false,
   showOnStartup: true,
   startMinimizedToTray: false,

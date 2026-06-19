@@ -5,6 +5,7 @@ import { defaultSettings } from '../types/settings';
 import type { TaskOccurrence } from '../types/task';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
+import { ConfirmContext } from './ConfirmDialog';
 
 const baseTask = (overrides: Partial<TaskOccurrence> = {}): TaskOccurrence => ({
   id: 'task-1',
@@ -52,7 +53,7 @@ describe('TaskItem scheduling controls', () => {
       updateTask: vi.fn(async () => undefined),
       updateTaskProgress: vi.fn(async () => undefined),
       postponeTask: vi.fn(async () => undefined),
-      archiveTask: vi.fn(async () => undefined),
+      clearTaskPostponements: vi.fn(async () => undefined),
       deleteTask: vi.fn(async () => undefined),
     });
   });
@@ -82,10 +83,46 @@ describe('TaskItem scheduling controls', () => {
     expect(screen.queryByLabelText('开始日期')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('截止日期')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '保存排期' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '归档' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认延期到 2026-06-20' }));
 
     await waitFor(() => {
       expect(postponeTask).toHaveBeenCalledWith('task-1', '2026-06-18', '2026-06-20', 40);
+    });
+  });
+
+  it('clears all postponement history from the right-click menu after confirmation', async () => {
+    const clearTaskPostponements = vi.fn(async () => undefined);
+    const confirm = vi.fn(async () => true);
+    useTaskStore.setState({ clearTaskPostponements });
+    render(
+      <ConfirmContext.Provider value={confirm}>
+        <TaskItem task={baseTask({
+          postponedAt: '2026-06-18T01:00:00.000Z',
+          postponementHistory: [{
+            id: 'postpone-1',
+            taskId: 'task-1',
+            fromDate: '2026-06-18',
+            toDate: '2026-06-20',
+            createdAt: '2026-06-18T01:00:00.000Z',
+            updatedAt: '2026-06-18T01:00:00.000Z',
+            deletedAt: null,
+            syncStatus: 'local',
+            version: 1,
+          }],
+        })} />
+      </ConfirmContext.Provider>,
+    );
+
+    fireEvent.contextMenu(screen.getByRole('listitem'));
+    fireEvent.click(screen.getByRole('button', { name: '取消延期' }));
+
+    await waitFor(() => {
+      expect(confirm).toHaveBeenCalledWith(expect.objectContaining({
+        title: '取消延期',
+        danger: true,
+      }));
+      expect(clearTaskPostponements).toHaveBeenCalledWith('task-1');
     });
   });
 

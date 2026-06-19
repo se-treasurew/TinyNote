@@ -42,16 +42,6 @@ export class TaskRepository {
     return rows.map(mapTaskRow);
   }
 
-  async listArchive(): Promise<Task[]> {
-    const rows = await selectWithRetry<TaskRow[]>(
-      `SELECT ${taskColumns}
-       FROM tasks
-       WHERE status IN ('completed', 'archived')
-       ORDER BY updated_at DESC`,
-    );
-    return rows.map(mapTaskRow);
-  }
-
   async listAll(): Promise<Task[]> {
     const rows = await selectWithRetry<TaskRow[]>(
       `SELECT ${taskColumns}
@@ -240,6 +230,40 @@ export class TaskRepository {
          version = excluded.version`,
       taskPostponementToParams(postponement),
     );
+  }
+
+  async softDeletePostponements(taskId: string, now: string): Promise<TaskPostponement[]> {
+    const active = await this.listPostponements([taskId]);
+    const deleted = active.map((postponement) => ({
+      ...postponement,
+      updatedAt: now,
+      deletedAt: now,
+      syncStatus: 'pending' as const,
+      version: postponement.version + 1,
+    }));
+
+    await runInTransaction(async (db) => {
+      for (const postponement of deleted) {
+        await executeInTransaction(
+          db,
+          `UPDATE task_postponements
+           SET updated_at = $2,
+               deleted_at = $3,
+               sync_status = $4,
+               version = $5
+           WHERE id = $1`,
+          [
+            postponement.id,
+            postponement.updatedAt,
+            postponement.deletedAt,
+            postponement.syncStatus,
+            postponement.version,
+          ],
+        );
+      }
+    });
+
+    return deleted;
   }
 }
 

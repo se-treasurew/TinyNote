@@ -28,7 +28,7 @@ const { appUpdateService } = await import('./appUpdateService');
 describe('app update service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getVersion.mockResolvedValue('1.0.0');
+    mocks.getVersion.mockResolvedValue('1.0.1');
     mocks.check.mockResolvedValue(null);
     mocks.relaunch.mockResolvedValue(undefined);
     mocks.openUrl.mockResolvedValue(undefined);
@@ -40,7 +40,7 @@ describe('app update service', () => {
     expect(info).toEqual({
       productName: 'TinyNote',
       displayName: '小笺',
-      version: '1.0.0',
+      version: '1.0.1',
       githubUrl: 'https://github.com/se-treasurew/TinyNote',
     });
   });

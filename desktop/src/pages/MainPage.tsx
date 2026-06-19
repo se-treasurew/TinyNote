@@ -1,10 +1,8 @@
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
-import { ArchivePanel } from '../components/ArchivePanel';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarClock, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { AboutPanel } from '../components/AboutPanel';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { TaskManagePanel } from '../components/TaskManagePanel';
-import { ConfirmContext } from '../components/ConfirmDialog';
 import { TaskItem } from '../components/TaskItem';
 import { TitleBar } from '../components/TitleBar';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -16,7 +14,6 @@ import { isBatchPostponeEligibleTask } from '../services/taskScheduling';
 export function MainPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
-  const confirm = useContext(ConfirmContext);
   const settings = useSettingsStore((state) => state.settings);
   const tasks = useTaskStore((state) => state.tasks);
   const tasksByDate = useTaskStore((state) => state.tasksByDate);
@@ -26,10 +23,8 @@ export function MainPage() {
   const navigateDate = useTaskStore((state) => state.navigateDate);
   const goToToday = useTaskStore((state) => state.goToToday);
   const addTask = useTaskStore((state) => state.addTask);
-  const deleteTask = useTaskStore((state) => state.deleteTask);
   const postponeTasksForDate = useTaskStore((state) => state.postponeTasksForDate);
   const loadTasks = useTaskStore((state) => state.loadTasks);
-  const isArchiveOpen = useUiStore((state) => state.isArchiveOpen);
   const isSettingsOpen = useUiStore((state) => state.isSettingsOpen);
   const isTaskManageOpen = useUiStore((state) => state.isTaskManageOpen);
   const isAboutOpen = useUiStore((state) => state.isAboutOpen);
@@ -85,29 +80,6 @@ export function MainPage() {
   function cancelAdding() {
     setQuickTitle('');
     setIsAdding(false);
-  }
-
-  async function clearCompletedTasks() {
-    if (doneTasks.length === 0) {
-      return;
-    }
-    const ok = await confirm?.({
-      title: '清空已完成',
-      message: `将删除 ${doneTasks.length} 个已完成/归档任务，确定吗？`,
-      confirmLabel: '清空',
-      danger: true,
-    });
-    if (!ok) {
-      return;
-    }
-    try {
-      for (const task of doneTasks) {
-        await deleteTask(task.id);
-      }
-    } catch (error) {
-      console.error('Failed to clear completed tasks', error);
-      await loadTasks(settings.visibleDays);
-    }
   }
 
   return (
@@ -220,17 +192,7 @@ export function MainPage() {
           <CalendarClock size={18} />
           <span>顺延</span>
         </button>
-        <button
-          type="button"
-          className="bottom-action clear"
-          disabled={doneTasks.length === 0}
-          onClick={() => void clearCompletedTasks()}
-        >
-          <Trash2 size={18} />
-          <span>清空已完成</span>
-        </button>
       </section>
-      {isArchiveOpen && <ArchivePanel />}
       {isSettingsOpen && <SettingsPanel />}
       {isTaskManageOpen && <TaskManagePanel />}
       {isAboutOpen && <AboutPanel />}

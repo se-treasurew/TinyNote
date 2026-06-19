@@ -22,7 +22,7 @@ vi.mock('../services/appUpdateService', () => ({
     getAboutInfo: vi.fn(async () => ({
       productName: 'TinyNote',
       displayName: '小笺',
-      version: '1.0.0',
+      version: '1.0.1',
       githubUrl: 'https://github.com/se-treasurew/TinyNote',
     })),
     openGitHub: vi.fn(async () => undefined),
@@ -84,7 +84,6 @@ describe('MainPage display layout', () => {
     });
     useTaskStore.setState({
       tasks,
-      archiveTasks: [],
       tasksByDate: {
         '2026-06-16': [tasks[0], tasks[1]],
         '2026-06-17': [tasks[2]],
@@ -99,7 +98,6 @@ describe('MainPage display layout', () => {
     });
     useUiStore.setState({
       currentPanel: 'main',
-      isArchiveOpen: false,
       isSettingsOpen: false,
       isTaskManageOpen: false,
       isAboutOpen: false,
@@ -123,6 +121,7 @@ describe('MainPage display layout', () => {
     const completedTitle = within(completedSection).getByText('已完成整理');
     expect(completedTitle.closest('.task-item')).toHaveClass('completed');
     expect(screen.getByRole('button', { name: '恢复任务：已完成整理' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '清空已完成' })).not.toBeInTheDocument();
   });
 
   it('loads the next date window when the next arrow reaches the visible edge', async () => {
@@ -214,6 +213,6 @@ describe('MainPage display layout', () => {
     fireEvent.click(screen.getByRole('button', { name: '关于 TinyNote' }));
 
     expect(await screen.findByRole('complementary', { name: '关于 TinyNote' })).toBeInTheDocument();
-    expect(screen.getByText('当前版本 v1.0.0')).toBeInTheDocument();
+    expect(screen.getByText('当前版本 v1.0.1')).toBeInTheDocument();
   });
 });

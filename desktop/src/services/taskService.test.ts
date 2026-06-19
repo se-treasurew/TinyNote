@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   findProgressEntry: vi.fn(),
   upsertPostponement: vi.fn(),
+  softDeletePostponements: vi.fn(),
   upsertProgressEntry: vi.fn(),
   save: vi.fn(),
   insert: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('../repositories/taskRepository', () => ({
     findById: mocks.findById,
     findProgressEntry: mocks.findProgressEntry,
     upsertPostponement: mocks.upsertPostponement,
+    softDeletePostponements: mocks.softDeletePostponements,
     upsertProgressEntry: mocks.upsertProgressEntry,
     save: mocks.save,
     insert: mocks.insert,
@@ -113,6 +115,7 @@ describe('task service occurrence and progress behavior', () => {
     mocks.findById.mockResolvedValue(null);
     mocks.findProgressEntry.mockResolvedValue(null);
     mocks.upsertPostponement.mockResolvedValue(undefined);
+    mocks.softDeletePostponements.mockResolvedValue([]);
     mocks.upsertProgressEntry.mockResolvedValue(undefined);
     mocks.save.mockResolvedValue(undefined);
     mocks.insert.mockResolvedValue(undefined);
@@ -216,7 +219,7 @@ describe('task service occurrence and progress behavior', () => {
     const task = baseTask({ sourceType: 'daily' });
     mocks.findById.mockResolvedValue(task);
 
-    const occurrence = await taskService.completeTask('task-1', false, '2026-06-18');
+    const occurrence = await taskService.completeTask('task-1', '2026-06-18');
 
     expect(mocks.save).not.toHaveBeenCalled();
     expect(mocks.upsertProgressEntry).toHaveBeenCalledWith(expect.objectContaining({
@@ -241,31 +244,48 @@ describe('task service occurrence and progress behavior', () => {
     mocks.findById.mockResolvedValue(task);
     mocks.listPostponements.mockResolvedValue([history]);
 
-    const occurrence = await taskService.completeTask('task-1', false, '2026-06-20');
+    const occurrence = await taskService.completeTask('task-1', '2026-06-20');
 
     expect(mocks.listPostponements).toHaveBeenCalledWith(['task-1']);
     expect(occurrence.status).toBe('completed');
     expect(occurrence.postponementHistory).toEqual([history]);
   });
 
-  it('preserves postponement history when archiving a postponed task', async () => {
+  it('clears all postponement history without changing dates or progress', async () => {
     const task = baseTask({
-      sourceType: 'manual',
+      sourceType: 'multi_day',
       taskDate: '2026-06-18',
+      endDate: '2026-06-24',
       postponedAt: '2026-06-18T01:00:00.000Z',
     });
-    const history = taskPostponement({
-      fromDate: '2026-06-18',
-      toDate: '2026-06-20',
-    });
+    const history = [
+      taskPostponement({ id: 'postpone-1', toDate: '2026-06-20' }),
+      taskPostponement({ id: 'postpone-2', fromDate: '2026-06-20', toDate: '2026-06-24' }),
+    ];
     mocks.findById.mockResolvedValue(task);
-    mocks.listPostponements.mockResolvedValue([history]);
+    mocks.softDeletePostponements.mockResolvedValue(history.map((item) => ({
+      ...item,
+      deletedAt: '2026-06-19T00:00:00.000Z',
+      syncStatus: 'pending',
+      version: item.version + 1,
+    })));
 
-    const occurrence = await taskService.archiveTask('task-1');
+    const occurrence = await taskService.clearTaskPostponements('task-1');
 
-    expect(mocks.listPostponements).toHaveBeenCalledWith(['task-1']);
-    expect(occurrence.status).toBe('archived');
-    expect(occurrence.postponementHistory).toEqual([history]);
+    expect(mocks.softDeletePostponements).toHaveBeenCalledWith('task-1', expect.any(String));
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'task-1',
+      taskDate: '2026-06-18',
+      endDate: '2026-06-24',
+      postponedAt: null,
+    }));
+    expect(mocks.upsertProgressEntry).not.toHaveBeenCalled();
+    expect(mocks.writeSyncLog).toHaveBeenCalledWith(expect.objectContaining({
+      entityType: 'task_postponement',
+      operation: 'delete',
+    }));
+    expect(occurrence.postponementHistory).toEqual([]);
+    expect(occurrence.endDate).toBe('2026-06-24');
   });
 
   it('preserves postponement history when restoring a postponed occurrence', async () => {

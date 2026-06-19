@@ -220,7 +220,7 @@ export function TaskManagePanel() {
                   <strong>{task.title}</strong>
                   <span>
                     {task.taskDate}{task.endDate ? ` - ${task.endDate}` : ''}
-                    {task.status !== 'active' && ` · ${task.status === 'completed' ? '已完成' : '已归档'}`}
+                    {task.status !== 'active' && ' · 已完成'}
                   </span>
                 </div>
                 <button type="button" aria-label="编辑" onClick={() => startEdit(task)}>

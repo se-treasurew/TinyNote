@@ -152,6 +152,22 @@ describe('task occurrences', () => {
     expect(occurrences[1].progressPercent).toBe(25);
   });
 
+  it('removes the postponed target occurrence after its history is soft-deleted', () => {
+    const task = baseTask({ sourceType: 'manual', taskDate: '2026-06-16', postponedAt: null });
+    const occurrences = buildTaskOccurrences({
+      tasks: [task],
+      progressEntries: [progressEntry({ progressDate: '2026-06-17', percent: 25 })],
+      postponements: [postponement({
+        fromDate: '2026-06-16',
+        toDate: '2026-06-17',
+        deletedAt: '2026-06-19T00:00:00.000Z',
+      })],
+      visibleDates: ['2026-06-16', '2026-06-17'],
+    });
+
+    expect(occurrences.map((item) => item.taskDate)).toEqual(['2026-06-16']);
+  });
+
   it('uses per-date completion for recurring task occurrences', () => {
     const task = baseTask({ sourceType: 'daily', taskDate: '2026-06-16' });
     const occurrences = buildTaskOccurrences({

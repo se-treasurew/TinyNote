@@ -38,6 +38,15 @@ jobs:
         working-directory: desktop
         run: npm run test
 
+      - name: Read release notes
+        id: release_notes
+        shell: pwsh
+        run: |
+          $body = node .github/scripts/extract-release-notes.mjs
+          "body<<TINyNoteReleaseNotes" >> $env:GITHUB_OUTPUT
+          $body >> $env:GITHUB_OUTPUT
+          "TINyNoteReleaseNotes" >> $env:GITHUB_OUTPUT
+
       - uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -48,7 +57,7 @@ jobs:
           tauriScript: npm run tauri
           tagName: v__VERSION__
           releaseName: TinyNote v__VERSION__
-          releaseBody: See the assets to download and install TinyNote.
+          releaseBody: ${{ steps.release_notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true

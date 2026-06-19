@@ -1,6 +1,6 @@
 [package]
 name = "tinynote"
-version = "1.0.0"
+version = "1.0.1"
 description = "TinyNote 小笺 Windows desktop MVP"
 authors = ["TinyNote"]
 edition = "2021"

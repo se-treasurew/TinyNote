@@ -1,20 +1,11 @@
 import type { Task } from '../types/task';
 
-export function applyComplete<T extends Task>(task: T, completeToArchive: boolean, now: string): T {
+export function applyComplete<T extends Task>(task: T, now: string): T {
   return bumpTask({
     ...task,
-    status: completeToArchive ? 'archived' : 'completed',
+    status: 'completed',
     completedAt: now,
-    archivedAt: completeToArchive ? now : task.archivedAt,
-    updatedAt: now,
-  });
-}
-
-export function applyArchive<T extends Task>(task: T, now: string): T {
-  return bumpTask({
-    ...task,
-    status: 'archived',
-    archivedAt: now,
+    archivedAt: null,
     updatedAt: now,
   });
 }

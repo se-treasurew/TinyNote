@@ -25,7 +25,7 @@ describe('AboutPanel update workflow', () => {
     mocks.getAboutInfo.mockResolvedValue({
       productName: 'TinyNote',
       displayName: '小笺',
-      version: '1.0.0',
+      version: '1.0.1',
       githubUrl: 'https://github.com/se-treasurew/TinyNote',
     });
     mocks.checkForUpdate.mockResolvedValue(null);
@@ -40,7 +40,7 @@ describe('AboutPanel update workflow', () => {
 
     expect(await screen.findByText('小笺')).toBeInTheDocument();
     expect(screen.getByText('TinyNote')).toBeInTheDocument();
-    expect(screen.getByText('当前版本 v1.0.0')).toBeInTheDocument();
+    expect(screen.getByText('当前版本 v1.0.1')).toBeInTheDocument();
     expect(screen.getByText('轻量的桌面任务便签，用来安放今天、每日和多日事项。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '打开 GitHub' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '检查更新' })).toBeInTheDocument();
@@ -80,6 +80,7 @@ describe('AboutPanel update workflow', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '检查更新' }));
     expect(await screen.findByText('发现新版本 v1.0.1')).toBeInTheDocument();
+    expect(screen.getByText('修复体验问题')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '更新' }));
 

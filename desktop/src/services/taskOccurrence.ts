@@ -49,9 +49,10 @@ function shouldShowTaskOnDate(task: Task, date: string): boolean {
 }
 
 function visibleTaskDates(task: Task, postponements: TaskPostponement[], visibleDates: string[]): string[] {
+  const activePostponements = postponements.filter((postponement) => !postponement.deletedAt);
   const dates = new Set<string>();
   for (const date of visibleDates) {
-    if (shouldShowTaskOnDate(task, date) || postponements.some((postponement) => postponement.toDate === date)) {
+    if (shouldShowTaskOnDate(task, date) || activePostponements.some((postponement) => postponement.toDate === date)) {
       dates.add(date);
     }
   }

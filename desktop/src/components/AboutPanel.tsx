@@ -135,6 +135,12 @@ export function AboutPanel() {
         </button>
       </div>
       {message && <p className={`about-status ${status === 'error' ? 'error' : ''}`}>{message}</p>}
+      {pendingUpdate?.body.trim() && (
+        <section className="about-release-notes" aria-label={`v${pendingUpdate.version} 更新说明`}>
+          <strong>更新说明</strong>
+          <p>{pendingUpdate.body.trim()}</p>
+        </section>
+      )}
       {progress && progress.total !== null && (
         <div className="about-progress" aria-label="更新下载进度">
           <span style={{ width: `${progress.percent ?? 0}%` }} />

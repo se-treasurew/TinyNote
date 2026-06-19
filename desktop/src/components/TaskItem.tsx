@@ -1,7 +1,6 @@
-import { Archive, CalendarClock, CalendarDays, Check, Info, MoreHorizontal, Save, Trash2, X } from 'lucide-react';
+import { CalendarClock, CalendarDays, Check, Info, MoreHorizontal, Save, Trash2, Undo2, X } from 'lucide-react';
 import { useContext, useEffect, useRef, useState } from 'react';
 import type { TaskOccurrence, TaskSourceType } from '../types/task';
-import { useSettingsStore } from '../stores/settingsStore';
 import { useTaskStore } from '../stores/taskStore';
 import { addDays, todayIsoDate } from '../utils/date';
 import { isPostponeEligibleTask } from '../services/taskScheduling';
@@ -23,12 +22,11 @@ export function TaskItem({ task }: TaskItemProps) {
   const [progress, setProgress] = useState(task.progressPercent);
   const menuRef = useRef<HTMLDivElement>(null);
   const confirm = useContext(ConfirmContext);
-  const settings = useSettingsStore((state) => state.settings);
   const completeTask = useTaskStore((state) => state.completeTask);
   const updateTask = useTaskStore((state) => state.updateTask);
   const updateTaskProgress = useTaskStore((state) => state.updateTaskProgress);
   const postponeTask = useTaskStore((state) => state.postponeTask);
-  const archiveTask = useTaskStore((state) => state.archiveTask);
+  const clearTaskPostponements = useTaskStore((state) => state.clearTaskPostponements);
   const restoreTask = useTaskStore((state) => state.restoreTask);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const isDone = task.status === 'completed' || task.status === 'archived';
@@ -143,7 +141,7 @@ export function TaskItem({ task }: TaskItemProps) {
       return;
     }
 
-    await completeTask(task.id, settings.completeToArchive);
+    await completeTask(task.id);
   }
 
   async function postpone() {
@@ -153,6 +151,19 @@ export function TaskItem({ task }: TaskItemProps) {
 
     await postponeTask(task.id, task.occurrenceDate, postponeToDate, progress);
     setIsMenuOpen(false);
+  }
+
+  async function confirmClearPostponements() {
+    const ok = await confirm?.({
+      title: '取消延期',
+      message: '将清除该任务的全部延期标识与历史，但不会恢复截止日期或进度。确定吗？',
+      confirmLabel: '取消延期',
+      danger: true,
+    });
+    if (ok) {
+      closeMenu();
+      await clearTaskPostponements(task.id);
+    }
   }
 
   async function confirmDelete() {
@@ -210,7 +221,6 @@ export function TaskItem({ task }: TaskItemProps) {
             {task.sourceType === 'manual' && <span className="tag-manual">普通</span>}
             {task.sourceType === 'daily' && <span className="tag-daily">每日</span>}
             {task.sourceType === 'multi_day' && <span className="tag-multi">多日</span>}
-            {task.status === 'archived' && <span className="tag-archived">归档</span>}
             {task.postponedAt && <span className="tag-postponed">延期</span>}
             {isOverdue && <span className="tag-overdue">过期</span>}
           </div>
@@ -263,10 +273,10 @@ export function TaskItem({ task }: TaskItemProps) {
               <Info size={14} />
               <span>任务详情</span>
             </button>
-            {task.status !== 'archived' && (
-              <button type="button" onClick={() => { closeMenu(); void archiveTask(task.id); }}>
-                <Archive size={14} />
-                <span>归档</span>
+            {(task.postponedAt || task.postponementHistory.length > 0) && (
+              <button type="button" onClick={() => void confirmClearPostponements()}>
+                <Undo2 size={14} />
+                <span>取消延期</span>
               </button>
             )}
             <button type="button" onClick={() => { void confirmDelete(); }}>
@@ -445,7 +455,7 @@ function formatSourceType(sourceType: TaskSourceType): string {
 
 function formatStatus(status: TaskOccurrence['status']): string {
   if (status === 'completed') return '已完成';
-  if (status === 'archived') return '已归档';
+  if (status === 'archived') return '已完成';
   if (status === 'deleted') return '已删除';
   return '进行中';
 }

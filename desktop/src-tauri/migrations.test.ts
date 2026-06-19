@@ -56,4 +56,15 @@ describe('Tauri SQL migrations', () => {
     expect(migration).toContain('to_date TEXT NOT NULL');
     expect(migration).toContain('CREATE INDEX IF NOT EXISTS idx_task_postponements_task_id');
   });
+
+  it('converts archived records to completed and removes the archive setting in migration 6', () => {
+    const libRs = readFileSync(resolve(process.cwd(), 'src-tauri/src/lib.rs'), 'utf8');
+    const migration = migrationSql(libRs, 6);
+
+    expect(migration).toContain("UPDATE tasks");
+    expect(migration).toContain("status = 'completed'");
+    expect(migration).toContain("WHERE status = 'archived'");
+    expect(migration).toContain('UPDATE task_progress_entries');
+    expect(migration).toContain("DELETE FROM app_settings WHERE key = 'completeToArchive'");
+  });
 });

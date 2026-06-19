@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   listAllProgressEntries: vi.fn(),
   listAllPostponements: vi.fn(),
   upsertTask: vi.fn(),
+  upsertProgressEntry: vi.fn(),
   upsertPostponement: vi.fn(),
   listRoutines: vi.fn(),
   listInstances: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('../repositories/taskRepository', () => ({
     listAllProgressEntries: mocks.listAllProgressEntries,
     listAllPostponements: mocks.listAllPostponements,
     upsert: mocks.upsertTask,
+    upsertProgressEntry: mocks.upsertProgressEntry,
     upsertPostponement: mocks.upsertPostponement,
   })),
 }));
@@ -82,6 +84,7 @@ describe('data portability compatibility', () => {
     mocks.listAllProgressEntries.mockResolvedValue([]);
     mocks.listAllPostponements.mockResolvedValue([]);
     mocks.upsertTask.mockResolvedValue(undefined);
+    mocks.upsertProgressEntry.mockResolvedValue(undefined);
     mocks.upsertPostponement.mockResolvedValue(undefined);
     mocks.writeSyncLog.mockResolvedValue(undefined);
     mocks.setMany.mockResolvedValue(undefined);
@@ -132,6 +135,52 @@ describe('data portability compatibility', () => {
       taskId: 'task-1',
       fromDate: '2026-06-18',
       toDate: '2026-06-20',
+    }));
+  });
+
+  it('normalizes legacy archived records and ignores the removed archive setting', async () => {
+    await dataPortabilityService.importData({
+      schemaVersion: 3,
+      exportedAt: '2026-06-19T00:00:00.000Z',
+      tasks: [{
+        ...legacyTaskWithoutPostponedAt,
+        status: 'archived',
+        completedAt: '2026-06-18T01:00:00.000Z',
+        archivedAt: '2026-06-18T01:00:00.000Z',
+      }],
+      routines: [],
+      routineInstances: [],
+      taskProgressEntries: [{
+        id: 'progress-1',
+        taskId: 'task-1',
+        progressDate: '2026-06-18',
+        percent: 100,
+        status: 'archived',
+        completedAt: '2026-06-18T01:00:00.000Z',
+        archivedAt: '2026-06-18T01:00:00.000Z',
+        deletedAt: null,
+        createdAt: '2026-06-18T00:00:00.000Z',
+        updatedAt: '2026-06-18T01:00:00.000Z',
+        syncStatus: 'local',
+        version: 1,
+      }],
+      taskPostponements: [],
+      settings: {
+        ...defaultSettings,
+        completeToArchive: true,
+      },
+    } as never);
+
+    expect(mocks.upsertTask).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'completed',
+      archivedAt: null,
+    }));
+    expect(mocks.upsertProgressEntry).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'completed',
+      archivedAt: null,
+    }));
+    expect(mocks.setMany).toHaveBeenCalledWith(expect.not.objectContaining({
+      completeToArchive: expect.anything(),
     }));
   });
 });

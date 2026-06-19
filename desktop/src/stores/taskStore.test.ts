@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   updateTask: vi.fn(),
   updateTaskProgress: vi.fn(),
   postponeTask: vi.fn(),
+  clearTaskPostponements: vi.fn(),
   completeTask: vi.fn(),
   deleteTask: vi.fn(),
 }));
@@ -15,13 +16,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../services/taskService', () => ({
   taskService: {
     loadVisibleTasks: mocks.loadVisibleTasks,
-    loadArchive: vi.fn(async () => []),
     addTask: mocks.addTask,
     updateTask: mocks.updateTask,
     updateTaskProgress: mocks.updateTaskProgress,
     postponeTask: mocks.postponeTask,
+    clearTaskPostponements: mocks.clearTaskPostponements,
     completeTask: mocks.completeTask,
-    archiveTask: vi.fn(),
     restoreTask: vi.fn(),
     deleteTask: mocks.deleteTask,
   },
@@ -98,11 +98,11 @@ describe('task store date window behavior', () => {
       postponedFromDate: '2026-06-18',
       postponedToDate: '2026-06-19',
     }));
+    mocks.clearTaskPostponements.mockResolvedValue(baseTask({ postponedAt: null, postponementHistory: [] }));
     mocks.completeTask.mockResolvedValue(baseTask({ status: 'completed' }));
     mocks.deleteTask.mockResolvedValue(baseTask({ status: 'deleted', deletedAt: '2026-06-18T01:00:00.000Z' }));
     useTaskStore.setState({
       tasks: [],
-      archiveTasks: [],
       tasksByDate: {},
       visibleDates: ['2026-06-17', '2026-06-18', '2026-06-19'],
       visibleStartDate: '2026-06-17',
@@ -321,7 +321,7 @@ describe('task store date window behavior', () => {
     const staleRefresh = useTaskStore.getState().loadTasks(3, '2026-06-17', '2026-06-18');
     expect(useTaskStore.getState().isLoading).toBe(true);
 
-    await useTaskStore.getState().completeTask('task-1', false);
+    await useTaskStore.getState().completeTask('task-1');
     expect(useTaskStore.getState().isLoading).toBe(false);
 
     staleLoad.resolve([]);
@@ -390,9 +390,9 @@ describe('task store date window behavior', () => {
       selectedDate: '2026-06-18',
     });
 
-    await useTaskStore.getState().completeTask('daily-1', false);
+    await useTaskStore.getState().completeTask('daily-1');
 
-    expect(mocks.completeTask).toHaveBeenCalledWith('daily-1', false, '2026-06-18');
+    expect(mocks.completeTask).toHaveBeenCalledWith('daily-1', '2026-06-18');
     expect(useTaskStore.getState().tasksByDate['2026-06-18']?.[0]?.status).toBe('completed');
   });
 
@@ -421,7 +421,7 @@ describe('task store date window behavior', () => {
       visibleStartDate: '2026-06-20',
     });
 
-    await useTaskStore.getState().completeTask('task-1', false);
+    await useTaskStore.getState().completeTask('task-1');
 
     const updated = useTaskStore.getState().tasksByDate['2026-06-20']?.[0];
     expect(updated?.status).toBe('completed');
@@ -465,6 +465,24 @@ describe('task store date window behavior', () => {
     await useTaskStore.getState().postponeTask('task-1', '2026-06-18', '2026-06-20', 35);
 
     expect(mocks.postponeTask).toHaveBeenCalledWith('task-1', '2026-06-18', '2026-06-20', 35);
+  });
+
+  it('clears postponement history and refreshes the visible window once', async () => {
+    const task = baseTask({
+      postponedAt: '2026-06-18T01:00:00.000Z',
+      postponementHistory: [taskPostponement()],
+    });
+    useTaskStore.setState({
+      tasks: [task],
+      tasksByDate: { '2026-06-18': [task] },
+    });
+    mocks.loadVisibleTasks.mockResolvedValue([]);
+
+    await useTaskStore.getState().clearTaskPostponements('task-1');
+
+    expect(mocks.clearTaskPostponements).toHaveBeenCalledWith('task-1');
+    expect(mocks.loadVisibleTasks).toHaveBeenCalledTimes(1);
+    expect(mocks.loadVisibleTasks).toHaveBeenCalledWith('2026-06-17', 3);
   });
 
   it('postpones all eligible active tasks for the selected date and refreshes once', async () => {
@@ -531,7 +549,7 @@ describe('task store date window behavior', () => {
       tasks: [task],
       tasksByDate: { [selectedAfterNavigation]: [task] },
     });
-    const completion = useTaskStore.getState().completeTask('task-1', false);
+    const completion = useTaskStore.getState().completeTask('task-1');
 
     const taskAfterClick = useTaskStore.getState().tasks.find((item) => item.id === 'task-1');
     expect(taskAfterClick?.status).toBe('completed');
