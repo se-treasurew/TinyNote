@@ -102,3 +102,5 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 ## 发布
 
 发布流程由 `.github/workflows/release.yml` 驱动：推送 `v*` tag（或手动 dispatch）后在 `windows-latest` 上跑 `typecheck` + `test`，再用 `tauri-apps/tauri-action@v0.6.2` 构建、签名并发布 GitHub Release。Release body 由 `.github/scripts/extract-release-notes.mjs` 从 `CHANGELOG.md` 提取，updater `latest.json` 指向 `se-treasurew/TinyNote` 的 latest release（见 `tauri.conf.json` 的 updater endpoints）。签名密钥 `TAURI_SIGNING_PRIVATE_KEY` / 密码为仓库 secret，本地需自行配置才能产出带 `.sig` 的 updater 制品。升级器公钥已内嵌在 `tauri.conf.json` 的 `plugins.updater.pubkey`。
+
+**不支持降级安装**。SQLite 迁移只增不删，且 sqlx 在启动时校验数据库里已应用的 migration 必须全部存在于当前 binary 的迁移列表中（`ignore_missing` 默认 false）。因此从高版本降级到低版本会启动失败：高版本已写入的 migration（如 v1.0.2 的 migration 7）低版本 binary 不认识，sqlx 抛 `VersionMissing` 致 SQL 插件初始化失败；同时 Tauri NSIS 安装器默认也拒绝覆盖更高版本。全新安装和低→高升级均正常，仅高→低降级不受支持。若未来确需允许降级，需在 Rust 侧为 SQL 插件设置 `ignore_missing = true` 并重新发布。
