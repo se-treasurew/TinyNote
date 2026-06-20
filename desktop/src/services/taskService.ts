@@ -39,20 +39,47 @@ export class TaskService {
 
   async addTask(input: CreateTaskInput): Promise<TaskOccurrence> {
     const now = new Date().toISOString();
+    // Subtasks inherit the parent's schedule (sourceType/taskDate/endDate) and
+    // are limited to one level — a subtask cannot have subtasks. Enforce this
+    // server-side rather than trusting the UI, using the parent's definition
+    // values (a parent Task's taskDate IS the range start, unlike an
+    // occurrence whose taskDate is the per-day value).
+    let resolvedInput = input;
+    if (input.parentTaskId) {
+      const parent = await taskRepository.findById(input.parentTaskId);
+      if (!parent) {
+        throw new Error(`Parent task not found: ${input.parentTaskId}`);
+      }
+      if (parent.parentTaskId !== null) {
+        throw new Error('Cannot create a subtask under another subtask (one level only)');
+      }
+      resolvedInput = {
+        ...input,
+        sourceType: parent.sourceType,
+        taskDate: parent.taskDate,
+        endDate: parent.endDate,
+      };
+    }
+
     const task = createTask({
-      title: normalizeTitle(input.title),
-      content: input.content ?? null,
-      taskDate: input.taskDate,
-      endDate: input.endDate ?? null,
-      sourceType: input.sourceType ?? 'manual',
-      routineId: input.routineId ?? null,
-      parentTaskId: input.parentTaskId ?? null,
-      sortOrder: input.sortOrder ?? Date.now(),
+      title: normalizeTitle(resolvedInput.title),
+      content: resolvedInput.content ?? null,
+      taskDate: resolvedInput.taskDate,
+      endDate: resolvedInput.endDate ?? null,
+      sourceType: resolvedInput.sourceType ?? 'manual',
+      routineId: resolvedInput.routineId ?? null,
+      parentTaskId: resolvedInput.parentTaskId ?? null,
+      sortOrder: resolvedInput.sortOrder ?? Date.now(),
       now,
     });
 
     await taskRepository.insert(task);
     await writeSyncLog({ entityType: 'task', entityId: task.id, operation: 'create', payload: task });
+    // For subtasks the definition taskDate is the parent's range start (stored
+    // above), but the returned occurrence should land on the date the caller is
+    // viewing (input.taskDate) so the optimistic merge shows it immediately
+    // under the parent without a reload. taskToOccurrence uses input.taskDate as
+    // the occurrence date while keeping definitionTaskDate from the stored task.
     return taskToOccurrence(task, input.taskDate, [], []);
   }
 
@@ -88,6 +115,35 @@ export class TaskService {
 
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
+
+    // A top-level parent's schedule change must propagate to its children so
+    // the tree stays in sync. Subtask schedule editing is disabled in the UI,
+    // so only top-level tasks (parentTaskId === null) propagate.
+    const scheduleChanged =
+      task.parentTaskId === null &&
+      (input.sourceType !== undefined ||
+        input.taskDate !== undefined ||
+        input.endDate !== undefined);
+
+    if (scheduleChanged) {
+      const children = await taskRepository.listByParentId(id);
+      if (children.length > 0) {
+        const updatedChildren = children.map((child) => ({
+          ...child,
+          sourceType: updated.sourceType,
+          taskDate: updated.taskDate,
+          endDate: updated.endDate,
+          updatedAt: now,
+          syncStatus: 'pending' as const,
+          version: child.version + 1,
+        }));
+        await taskRepository.saveMany(updatedChildren);
+        for (const child of updatedChildren) {
+          await writeSyncLog({ entityType: 'task', entityId: child.id, operation: 'update', payload: child });
+        }
+      }
+    }
+
     return this.taskToOccurrenceWithHistory(updated, input.taskDate ?? updated.taskDate);
   }
 
@@ -126,6 +182,30 @@ export class TaskService {
       throw new Error('Postpone target date must be after source date');
     }
 
+    const parentOccurrence = await this.postponeSingle(task, fromDate, toDate, sourceProgressPercent);
+
+    // Cascade to active subtasks that are also eligible on fromDate. Children
+    // inherit the parent's range, so manual children are always eligible and
+    // multi_day children are eligible iff the parent is. postponeSingle does
+    // not itself look up children, so there is no recursion (children cannot
+    // have children at one level). Already-completed children are skipped by
+    // the eligibility check (status must be active).
+    const children = await taskRepository.listByParentId(id);
+    for (const child of children) {
+      if (isPostponeEligibleTask(child, fromDate)) {
+        await this.postponeSingle(child, fromDate, toDate, undefined);
+      }
+    }
+
+    return parentOccurrence;
+  }
+
+  private async postponeSingle(
+    task: Task,
+    fromDate: string,
+    toDate: string,
+    sourceProgressPercent?: number,
+  ): Promise<TaskOccurrence> {
     const currentEntry = await this.resolveProgressForPostponement(task, fromDate);
     if (currentEntry && currentEntry.status !== 'active') {
       throw new Error('Task cannot be postponed');
@@ -141,7 +221,7 @@ export class TaskService {
       version: task.version + 1,
     };
     const postponement = createPostponement({
-      taskId: id,
+      taskId: task.id,
       fromDate,
       toDate,
       now,
@@ -153,10 +233,10 @@ export class TaskService {
     await writeSyncLog({ entityType: 'task_postponement', entityId: postponement.id, operation: 'create', payload: postponement });
 
     const sourcePercent = currentEntry?.percent ?? clampProgressPercent(sourceProgressPercent ?? 0);
-    const existingNextEntry = await taskRepository.findProgressEntry(id, toDate);
+    const existingNextEntry = await taskRepository.findProgressEntry(task.id, toDate);
     const nextEntry = createProgressEntry({
       existing: existingNextEntry,
-      taskId: id,
+      taskId: task.id,
       progressDate: toDate,
       // Preserve the target date's existing progress instead of overwriting it
       // with the source date's value. Fall back to the carried source progress
@@ -223,13 +303,22 @@ export class TaskService {
 
   async deleteTask(id: string): Promise<TaskOccurrence> {
     const task = await this.requireTask(id);
-    const updated = applyDelete(task, new Date().toISOString());
-    await taskRepository.save(updated);
+    const now = new Date().toISOString();
+    const updated = applyDelete(task, now);
+
+    // Cascade soft-delete to subtasks (one level — children have no children).
+    const children = await taskRepository.listByParentId(id);
+    const deletedChildren = children.map((child) => applyDelete(child, now));
+
+    await taskRepository.saveMany([updated, ...deletedChildren]);
     // Free the routine instance slot so the task can be regenerated later.
     if (task.routineId) {
       await routineRepository.deleteInstanceByTaskId(id);
     }
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'delete', payload: updated });
+    for (const child of deletedChildren) {
+      await writeSyncLog({ entityType: 'task', entityId: child.id, operation: 'delete', payload: child });
+    }
     return taskToOccurrence(updated, updated.taskDate, [], []);
   }
 

@@ -5,9 +5,11 @@ import {
   applyRestore,
   groupActiveTasksByDate,
   groupDateDisplayTasksByDate,
+  groupTasksWithSubtasks,
   hasActiveTaskOnDate,
+  subtaskBadge,
 } from './taskWorkflow';
-import type { Task } from '../types/task';
+import type { Task, TaskOccurrence } from '../types/task';
 
 const baseTask = (overrides: Partial<Task> = {}): Task => ({
   id: 'task-1',
@@ -31,6 +33,19 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
   updatedAt: '2026-06-16T00:00:00.000Z',
   syncStatus: 'local',
   version: 1,
+  ...overrides,
+});
+
+const occurrence = (overrides: Partial<TaskOccurrence> = {}): TaskOccurrence => ({
+  ...baseTask(),
+  definitionTaskDate: '2026-06-16',
+  occurrenceDate: '2026-06-16',
+  progressPercent: 0,
+  progressEntryId: null,
+  postponementId: null,
+  postponedFromDate: null,
+  postponedToDate: null,
+  postponementHistory: [],
   ...overrides,
 });
 
@@ -86,5 +101,64 @@ describe('task workflow rules', () => {
     expect(grouped).toEqual({
       '2026-06-16': [tasks[0], tasks[1], tasks[2]],
     });
+  });
+
+  it('groups parents with their subtasks and keeps orphans as top-level', () => {
+    const parent = occurrence({ id: 'parent', sortOrder: 0 });
+    const childActive = occurrence({
+      id: 'child-a',
+      parentTaskId: 'parent',
+      sortOrder: 1,
+      createdAt: '2026-06-16T01:00:00.000Z',
+    });
+    const childDone = occurrence({
+      id: 'child-b',
+      parentTaskId: 'parent',
+      status: 'completed',
+      sortOrder: 0,
+      createdAt: '2026-06-16T00:30:00.000Z',
+    });
+    const orphan = occurrence({ id: 'orphan', parentTaskId: 'missing-parent', sortOrder: 5 });
+
+    const trees = groupTasksWithSubtasks([parent, childActive, childDone, orphan]);
+
+    expect(trees).toHaveLength(2);
+    expect(trees[0].task.id).toBe('parent');
+    // Active subtasks sort above completed ones, matching the active-first rule.
+    expect(trees[0].subtasks.map((s) => s.id)).toEqual(['child-a', 'child-b']);
+    expect(trees[1].task.id).toBe('orphan');
+    expect(trees[1].subtasks).toEqual([]);
+  });
+
+  it('sorts top-level tasks active-first then by sortOrder/createdAt', () => {
+    const trees = groupTasksWithSubtasks([
+      occurrence({ id: 'done', status: 'completed', sortOrder: 0 }),
+      occurrence({ id: 'active-late', status: 'active', sortOrder: 5 }),
+      occurrence({ id: 'active-early', status: 'active', sortOrder: 1 }),
+    ]);
+
+    expect(trees.map((t) => t.task.id)).toEqual(['active-early', 'active-late', 'done']);
+  });
+
+  it('computes the subtask completion badge', () => {
+    expect(subtaskBadge([])).toEqual({ done: 0, total: 0 });
+    expect(
+      subtaskBadge([
+        occurrence({ id: 'a', status: 'active' }),
+        occurrence({ id: 'b', status: 'active' }),
+      ]),
+    ).toEqual({ done: 0, total: 2 });
+    expect(
+      subtaskBadge([
+        occurrence({ id: 'a', status: 'completed' }),
+        occurrence({ id: 'b', status: 'archived' }),
+      ]),
+    ).toEqual({ done: 2, total: 2 });
+    expect(
+      subtaskBadge([
+        occurrence({ id: 'a', status: 'completed' }),
+        occurrence({ id: 'b', status: 'active' }),
+      ]),
+    ).toEqual({ done: 1, total: 2 });
   });
 });

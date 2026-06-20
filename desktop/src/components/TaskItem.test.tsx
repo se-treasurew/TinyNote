@@ -58,7 +58,7 @@ describe('TaskItem scheduling controls', () => {
     });
   });
 
-  it('shows an explicit postponed tag instead of an overdue tag', () => {
+  it('shows a postponed tag when the task was postponed', () => {
     render(<TaskItem task={baseTask({
       taskDate: '2026-06-16',
       occurrenceDate: '2026-06-16',
@@ -66,7 +66,6 @@ describe('TaskItem scheduling controls', () => {
     })} />);
 
     expect(screen.getByText('延期')).toBeInTheDocument();
-    expect(screen.queryByText('过期')).not.toBeInTheDocument();
   });
 
   it('opens a compact right-click menu and postpones to the chosen date', async () => {

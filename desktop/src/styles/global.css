@@ -465,6 +465,33 @@ button {
   padding: 5px 0;
 }
 
+.task-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Indent subtasks under their parent. The grid's 1fr title column absorbs the
+   left padding so the checkbox and menu stay aligned within the indented row. */
+.task-item--subtask {
+  padding-left: 22px;
+}
+
+.subtask-add-input {
+  margin-left: 22px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.subtask-add-input::placeholder {
+  color: var(--muted);
+}
+
 .check-button {
   width: 16px;
   height: 16px;
@@ -556,6 +583,16 @@ button {
 .tag-postponed {
   background: rgba(196, 181, 253, 0.18) !important;
   color: #c4b5fd;
+}
+
+.tag-subtask-count {
+  background: color-mix(in srgb, var(--text) 14%, transparent) !important;
+  color: var(--muted);
+}
+
+.task-detail-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .task-progress {

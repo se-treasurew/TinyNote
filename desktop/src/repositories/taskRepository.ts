@@ -62,6 +62,54 @@ export class TaskRepository {
     return rows[0] ? mapTaskRow(rows[0]) : null;
   }
 
+  async listByParentId(parentId: string): Promise<Task[]> {
+    const rows = await selectWithRetry<TaskRow[]>(
+      `SELECT ${taskColumns}
+       FROM tasks
+       WHERE parent_task_id = $1
+         AND status != 'deleted'
+       ORDER BY sort_order ASC, created_at ASC`,
+      [parentId],
+    );
+    return rows.map(mapTaskRow);
+  }
+
+  async saveMany(tasks: Task[]): Promise<void> {
+    if (tasks.length === 0) {
+      return;
+    }
+
+    await runInTransaction(async (db) => {
+      for (const task of tasks) {
+        await executeInTransaction(
+          db,
+          `UPDATE tasks
+           SET user_id = $2,
+               device_id = $3,
+               title = $4,
+               content = $5,
+               task_date = $6,
+               end_date = $7,
+               status = $8,
+               priority = $9,
+               source_type = $10,
+               routine_id = $11,
+               parent_task_id = $12,
+               sort_order = $13,
+               completed_at = $14,
+               archived_at = $15,
+               deleted_at = $16,
+               postponed_at = $17,
+               updated_at = $18,
+               sync_status = $19,
+               version = $20
+           WHERE id = $1`,
+          taskToUpdateParams(task),
+        );
+      }
+    });
+  }
+
   async insert(task: Task): Promise<void> {
     await executeWrite(
       `INSERT INTO tasks (${taskColumns})

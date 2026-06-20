@@ -138,8 +138,12 @@ function applyDefinitionUpdateInput(tasks: TaskOccurrence[], id: string, input: 
   });
 }
 
-function removeTask(tasks: TaskOccurrence[], id: string): TaskOccurrence[] {
-  return tasks.filter((task) => task.id !== id);
+// Removing a parent must also drop its subtasks from the visible state. The
+// service soft-deletes children server-side, but deleteTask's success path
+// does not reload, so without this the children would linger until the next
+// load.
+function removeTaskAndChildren(tasks: TaskOccurrence[], id: string): TaskOccurrence[] {
+  return tasks.filter((task) => task.id !== id && task.parentTaskId !== id);
 }
 
 function invalidatePendingLoads() {
@@ -220,6 +224,17 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const startDate = resolveVisibleStartForDate(input.taskDate, get().visibleStartDate, get().visibleDays);
     if (startDate !== get().visibleStartDate) {
       await get().loadTasks(get().visibleDays, startDate, input.taskDate);
+      return task;
+    }
+
+    // Manual tasks show on a single date, so one optimistic occurrence is
+    // enough. Daily/multi-day tasks (including subtasks that inherit such a
+    // parent) span the range and must appear on every visible date — a single
+    // occurrence would only cover the viewing date, leaving other days stale
+    // until a manual reload. Reload the window so every date reflects the new
+    // task.
+    if (task.sourceType === 'daily' || task.sourceType === 'multi_day') {
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       return task;
     }
 
@@ -375,12 +390,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: false });
     const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
     if (current) {
-      set((state) => taskCollectionPatch(removeTask(state.tasks, id)));
+      set((state) => taskCollectionPatch(removeTaskAndChildren(state.tasks, id)));
     }
 
     try {
       await taskService.deleteTask(id);
-      set((state) => taskCollectionPatch(removeTask(state.tasks, id)));
+      set((state) => taskCollectionPatch(removeTaskAndChildren(state.tasks, id)));
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;

@@ -25,9 +25,11 @@ describe('GitHub release workflow', () => {
       encoding: 'utf8',
     });
 
+    expect(changelog).toContain('## [1.0.2]');
     expect(changelog).toContain('## [1.0.1]');
     expect(changelog).toContain('## [1.0.0]');
-    expect(notes).toContain('移除归档');
+    expect(notes).toContain('子任务功能');
+    expect(notes).not.toContain('## [1.0.1]');
     expect(notes).not.toContain('## [1.0.0]');
   });
 });

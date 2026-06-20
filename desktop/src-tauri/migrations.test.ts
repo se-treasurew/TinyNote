@@ -67,4 +67,11 @@ describe('Tauri SQL migrations', () => {
     expect(migration).toContain('UPDATE task_progress_entries');
     expect(migration).toContain("DELETE FROM app_settings WHERE key = 'completeToArchive'");
   });
+
+  it('adds an index on parent_task_id to support subtask cascades in migration 7', () => {
+    const libRs = readFileSync(resolve(process.cwd(), 'src-tauri/src/lib.rs'), 'utf8');
+    const migration = migrationSql(libRs, 7);
+
+    expect(migration).toContain('CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id)');
+  });
 });

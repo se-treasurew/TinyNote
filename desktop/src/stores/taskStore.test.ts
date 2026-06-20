@@ -125,6 +125,65 @@ describe('task store date window behavior', () => {
     expect(useTaskStore.getState().tasksByDate['2026-06-18']?.[0]?.title).toBe('阅读器PPT');
   });
 
+  it('shows a newly added manual subtask immediately under the parent without a reload', async () => {
+    const parent = baseTask({ id: 'parent', taskDate: '2026-06-18' });
+    // The service returns the subtask occurrence on the viewing date even though
+    // its definition taskDate equals the parent's range start.
+    const childOccurrence = baseTask({
+      id: 'child',
+      parentTaskId: 'parent',
+      taskDate: '2026-06-18',
+      definitionTaskDate: '2026-06-16',
+      title: '子项',
+    });
+    mocks.addTask.mockResolvedValue(childOccurrence);
+    useTaskStore.setState({
+      tasks: [parent],
+      tasksByDate: { '2026-06-18': [parent] },
+      selectedDate: '2026-06-18',
+    });
+
+    await useTaskStore.getState().addTask({ title: '子项', parentTaskId: 'parent', taskDate: '2026-06-18' });
+
+    expect(mocks.loadVisibleTasks).not.toHaveBeenCalled();
+    const onDate = useTaskStore.getState().tasksByDate['2026-06-18'] ?? [];
+    expect(onDate.map((task) => task.id)).toContain('child');
+  });
+
+  it('reloads the visible window after adding a multi-day subtask so every day in the range updates', async () => {
+    const parent = baseTask({
+      id: 'parent',
+      sourceType: 'multi_day',
+      taskDate: '2026-06-18',
+      endDate: '2026-06-20',
+    });
+    const childOccurrence = baseTask({
+      id: 'child',
+      parentTaskId: 'parent',
+      sourceType: 'multi_day',
+      taskDate: '2026-06-18',
+      definitionTaskDate: '2026-06-18',
+      endDate: '2026-06-20',
+      title: '子项',
+    });
+    mocks.addTask.mockResolvedValue(childOccurrence);
+    mocks.loadVisibleTasks.mockResolvedValue([]);
+    useTaskStore.setState({
+      tasks: [parent],
+      tasksByDate: { '2026-06-18': [parent] },
+      selectedDate: '2026-06-18',
+      visibleDates: ['2026-06-17', '2026-06-18', '2026-06-19'],
+      visibleStartDate: '2026-06-17',
+      visibleDays: 3,
+    });
+
+    await useTaskStore.getState().addTask({ title: '子项', parentTaskId: 'parent', taskDate: '2026-06-18' });
+
+    // A multi-day subtask spans the range, so the window must reload to populate
+    // every day rather than only the viewing date.
+    expect(mocks.loadVisibleTasks).toHaveBeenCalledWith('2026-06-17', 3);
+  });
+
   it('moves the visible window to the new task date after editing a task outside the current window', async () => {
     mocks.updateTask.mockResolvedValue(baseTask({ id: 'task-1', taskDate: '2026-06-25', title: '移到下周' }));
 
@@ -625,5 +684,40 @@ describe('task store date window behavior', () => {
 
     expect(deletedOrder).toEqual(['done-a', 'done-b']);
     expect(useTaskStore.getState().tasksByDate['2026-06-18']).toBeUndefined();
+  });
+
+  it('removes subtasks alongside their parent on delete', async () => {
+    const parent = baseTask({ id: 'parent', taskDate: '2026-06-18' });
+    const child = baseTask({ id: 'child', parentTaskId: 'parent', taskDate: '2026-06-18' });
+    mocks.deleteTask.mockResolvedValue(baseTask({ id: 'parent', status: 'deleted' }));
+    useTaskStore.setState({
+      tasks: [parent, child],
+      tasksByDate: { '2026-06-18': [parent, child] },
+      selectedDate: '2026-06-18',
+    });
+
+    await useTaskStore.getState().deleteTask('parent');
+
+    const remaining = useTaskStore.getState().tasksByDate['2026-06-18'] ?? [];
+    expect(remaining.map((task) => task.id)).toEqual([]);
+  });
+
+  it('completes a subtask occurrence by id without affecting the parent', async () => {
+    const parent = baseTask({ id: 'parent', taskDate: '2026-06-18' });
+    const child = baseTask({ id: 'child', parentTaskId: 'parent', taskDate: '2026-06-18' });
+    mocks.completeTask.mockResolvedValue(baseTask({ id: 'child', status: 'completed', taskDate: '2026-06-18' }));
+    useTaskStore.setState({
+      tasks: [parent, child],
+      tasksByDate: { '2026-06-18': [parent, child] },
+      selectedDate: '2026-06-18',
+    });
+
+    await useTaskStore.getState().completeTask('child');
+
+    const byId = Object.fromEntries(
+      (useTaskStore.getState().tasksByDate['2026-06-18'] ?? []).map((task) => [task.id, task]),
+    );
+    expect(byId.child?.status).toBe('completed');
+    expect(byId.parent?.status).toBe('active');
   });
 });

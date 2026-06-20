@@ -188,4 +188,49 @@ describe('task occurrences', () => {
     expect(clampProgressPercent(45.8)).toBe(46);
     expect(clampProgressPercent(160)).toBe(100);
   });
+
+  it('shows a daily subtask on every date of the inherited parent range', () => {
+    const parent = baseTask({
+      id: 'parent',
+      sourceType: 'daily',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-18',
+    });
+    const child = baseTask({
+      id: 'child',
+      parentTaskId: 'parent',
+      sourceType: 'daily',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-18',
+    });
+
+    const occurrences = buildTaskOccurrences({
+      tasks: [parent, child],
+      progressEntries: [],
+      postponements: [],
+      visibleDates: ['2026-06-15', '2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19'],
+    });
+
+    const childDates = occurrences.filter((item) => item.id === 'child').map((item) => item.taskDate);
+    expect(childDates).toEqual(['2026-06-16', '2026-06-17', '2026-06-18']);
+  });
+
+  it('shows a manual subtask only on its own date, matching the manual parent', () => {
+    const parent = baseTask({ id: 'parent', sourceType: 'manual', taskDate: '2026-06-16' });
+    const child = baseTask({
+      id: 'child',
+      parentTaskId: 'parent',
+      sourceType: 'manual',
+      taskDate: '2026-06-16',
+    });
+
+    const occurrences = buildTaskOccurrences({
+      tasks: [parent, child],
+      progressEntries: [],
+      postponements: [],
+      visibleDates: ['2026-06-16', '2026-06-17'],
+    });
+
+    expect(occurrences.filter((item) => item.id === 'child').map((item) => item.taskDate)).toEqual(['2026-06-16']);
+  });
 });

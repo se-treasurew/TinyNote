@@ -10,10 +10,13 @@ import { useTaskStore } from '../stores/taskStore';
 import { todayIsoDate } from '../utils/date';
 import { useUiStore } from '../stores/uiStore';
 import { isBatchPostponeEligibleTask } from '../services/taskScheduling';
+import { groupTasksWithSubtasks, subtaskBadge } from '../services/taskWorkflow';
 
 export function MainPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
+  const [addingSubtaskParentId, setAddingSubtaskParentId] = useState<string | null>(null);
+  const [subtaskTitle, setSubtaskTitle] = useState('');
   const settings = useSettingsStore((state) => state.settings);
   const tasks = useTaskStore((state) => state.tasks);
   const tasksByDate = useTaskStore((state) => state.tasksByDate);
@@ -29,9 +32,12 @@ export function MainPage() {
   const isTaskManageOpen = useUiStore((state) => state.isTaskManageOpen);
   const isAboutOpen = useUiStore((state) => state.isAboutOpen);
   const selectedTasks = tasksByDate[selectedDate] ?? [];
-  const activeTasks = selectedTasks.filter((task) => task.status === 'active');
-  const doneTasks = selectedTasks.filter((task) => task.status === 'completed' || task.status === 'archived');
-  const canPostponeSelectedDate = activeTasks.some((task) => isBatchPostponeEligibleTask(task, selectedDate));
+  const trees = useMemo(() => groupTasksWithSubtasks(selectedTasks), [selectedTasks]);
+  const activeTrees = trees.filter((tree) => tree.task.status === 'active');
+  const doneTrees = trees.filter(
+    (tree) => tree.task.status === 'completed' || tree.task.status === 'archived',
+  );
+  const canPostponeSelectedDate = activeTrees.some((tree) => isBatchPostponeEligibleTask(tree.task, selectedDate));
 
   const activeCountByDate = useMemo(() => {
     return tasks.reduce<Record<string, number>>((counts, task) => {
@@ -80,6 +86,27 @@ export function MainPage() {
   function cancelAdding() {
     setQuickTitle('');
     setIsAdding(false);
+  }
+
+  function startAddSubtask(parentId: string) {
+    setAddingSubtaskParentId(parentId);
+    setSubtaskTitle('');
+  }
+
+  function cancelAddSubtask() {
+    setAddingSubtaskParentId(null);
+    setSubtaskTitle('');
+  }
+
+  async function submitSubtask(parentId: string) {
+    const title = subtaskTitle.trim();
+    if (!title) {
+      cancelAddSubtask();
+      return;
+    }
+    // sourceType/taskDate/endDate are inherited from the parent server-side.
+    await addTask({ title, parentTaskId: parentId, taskDate: selectedDate });
+    cancelAddSubtask();
   }
 
   return (
@@ -136,20 +163,52 @@ export function MainPage() {
       </section>
       <section className="task-board" aria-label={`${selectedDate} 任务`}>
         <div className="task-list active-list" role="list" aria-label="未完成任务">
-          {activeTasks.map((task) => (
-            <TaskItem key={task.id} task={task} />
+          {activeTrees.map((tree) => (
+            <div className="task-tree" key={tree.task.id}>
+              <TaskItem
+                task={tree.task}
+                subtaskBadge={tree.subtasks.length > 0 ? subtaskBadge(tree.subtasks) : undefined}
+                onRequestAddSubtask={() => startAddSubtask(tree.task.id)}
+              />
+              {tree.subtasks.map((subtask) => (
+                <TaskItem key={subtask.id} task={subtask} isSubtask />
+              ))}
+              {addingSubtaskParentId === tree.task.id && (
+                <input
+                  className="subtask-add-input"
+                  autoFocus
+                  aria-label="添加子任务"
+                  value={subtaskTitle}
+                  onChange={(event) => setSubtaskTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void submitSubtask(tree.task.id);
+                    if (event.key === 'Escape') cancelAddSubtask();
+                  }}
+                  placeholder="添加子任务"
+                />
+              )}
+            </div>
           ))}
-          {activeTasks.length === 0 && <p className="empty-copy">暂无待办</p>}
+          {activeTrees.length === 0 && <p className="empty-copy">暂无待办</p>}
         </div>
-        {doneTasks.length > 0 && (
+        {doneTrees.length > 0 && (
           <section className="completed-section" aria-label="已完成任务">
             <header>
               <span>已完成</span>
-              <strong>{doneTasks.length}</strong>
+              <strong>{doneTrees.length}</strong>
             </header>
             <div className="task-list completed-list" role="list">
-              {doneTasks.map((task) => (
-                <TaskItem key={task.id} task={task} />
+              {doneTrees.map((tree) => (
+                <div className="task-tree" key={tree.task.id}>
+                  <TaskItem
+                    task={tree.task}
+                    subtaskBadge={tree.subtasks.length > 0 ? subtaskBadge(tree.subtasks) : undefined}
+                    onRequestAddSubtask={() => startAddSubtask(tree.task.id)}
+                  />
+                  {tree.subtasks.map((subtask) => (
+                    <TaskItem key={subtask.id} task={subtask} isSubtask />
+                  ))}
+                </div>
               ))}
             </div>
           </section>

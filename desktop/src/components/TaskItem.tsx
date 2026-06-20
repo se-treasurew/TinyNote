@@ -1,16 +1,24 @@
-import { CalendarClock, CalendarDays, Check, Info, MoreHorizontal, Save, Trash2, Undo2, X } from 'lucide-react';
+import { CalendarClock, CalendarDays, Check, Info, MoreHorizontal, Plus, Save, Trash2, Undo2, X } from 'lucide-react';
 import { useContext, useEffect, useRef, useState } from 'react';
 import type { TaskOccurrence, TaskSourceType } from '../types/task';
 import { useTaskStore } from '../stores/taskStore';
-import { addDays, todayIsoDate } from '../utils/date';
+import { addDays } from '../utils/date';
 import { isPostponeEligibleTask } from '../services/taskScheduling';
 import { ConfirmContext } from './ConfirmDialog';
 
-interface TaskItemProps {
-  task: TaskOccurrence;
+interface SubtaskBadge {
+  done: number;
+  total: number;
 }
 
-export function TaskItem({ task }: TaskItemProps) {
+interface TaskItemProps {
+  task: TaskOccurrence;
+  isSubtask?: boolean;
+  subtaskBadge?: SubtaskBadge;
+  onRequestAddSubtask?: () => void;
+}
+
+export function TaskItem({ task, isSubtask = false, subtaskBadge, onRequestAddSubtask }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -30,10 +38,6 @@ export function TaskItem({ task }: TaskItemProps) {
   const restoreTask = useTaskStore((state) => state.restoreTask);
   const deleteTask = useTaskStore((state) => state.deleteTask);
   const isDone = task.status === 'completed' || task.status === 'archived';
-  // A task is overdue when its occurrence date has passed and it's still
-  // active. Suppressed when the task was already postponed (the 延期 tag
-  // already signals the situation) to avoid showing both at once.
-  const isOverdue = task.status === 'active' && !task.postponedAt && task.occurrenceDate < todayIsoDate();
   const canPostpone = isPostponeEligibleTask(task, task.occurrenceDate) && postponeToDate > task.occurrenceDate;
   const postponeButtonLabel = `确认延期到 ${postponeToDate}`;
   const scheduleEndDate = draftSourceType === 'manual' ? null : draftEndDate;
@@ -181,7 +185,7 @@ export function TaskItem({ task }: TaskItemProps) {
 
   return (
     <div
-      className={`task-item ${isDone ? 'completed' : ''}`}
+      className={`task-item ${isSubtask ? 'task-item--subtask' : ''} ${isDone ? 'completed' : ''}`}
       role="listitem"
       onContextMenu={(event) => {
         event.preventDefault();
@@ -222,7 +226,9 @@ export function TaskItem({ task }: TaskItemProps) {
             {task.sourceType === 'daily' && <span className="tag-daily">每日</span>}
             {task.sourceType === 'multi_day' && <span className="tag-multi">多日</span>}
             {task.postponedAt && <span className="tag-postponed">延期</span>}
-            {isOverdue && <span className="tag-overdue">过期</span>}
+            {subtaskBadge && subtaskBadge.total > 0 && (
+              <span className="tag-subtask-count">{subtaskBadge.done}/{subtaskBadge.total}</span>
+            )}
           </div>
           {task.status === 'active' && (
             <div className="task-progress">
@@ -245,6 +251,18 @@ export function TaskItem({ task }: TaskItemProps) {
         </button>
         {isMenuOpen && (
           <div className="task-menu-popover">
+            {!isSubtask && onRequestAddSubtask && (
+              <button
+                type="button"
+                onClick={() => {
+                  onRequestAddSubtask();
+                  closeMenu();
+                }}
+              >
+                <Plus size={14} />
+                <span>添加子任务</span>
+              </button>
+            )}
             {isPostponeEligibleTask(task, task.occurrenceDate) && (
               <>
                 <div className="task-menu-postpone-row">
@@ -293,6 +311,7 @@ export function TaskItem({ task }: TaskItemProps) {
           draftStartDate={draftStartDate}
           draftEndDate={draftEndDate}
           canSaveSchedule={canSaveSchedule}
+          canEditSchedule={!isSubtask}
           onClose={closeDetails}
           onSaveSchedule={() => void saveSchedule()}
           onChangeSourceType={updateDraftSourceType}
@@ -315,6 +334,7 @@ interface TaskDetailDialogProps {
   draftStartDate: string;
   draftEndDate: string;
   canSaveSchedule: boolean;
+  canEditSchedule: boolean;
   onClose: () => void;
   onSaveSchedule: () => void;
   onChangeSourceType: (sourceType: TaskSourceType) => void;
@@ -328,6 +348,7 @@ function TaskDetailDialog({
   draftStartDate,
   draftEndDate,
   canSaveSchedule,
+  canEditSchedule,
   onClose,
   onSaveSchedule,
   onChangeSourceType,
@@ -384,12 +405,14 @@ function TaskDetailDialog({
             <button
               type="button"
               className="task-detail-toggle"
-              onClick={() => setIsScheduleOpen((current) => !current)}
+              disabled={!canEditSchedule}
+              title={canEditSchedule ? undefined : '子任务跟随母任务排期，不可单独修改'}
+              onClick={() => canEditSchedule && setIsScheduleOpen((current) => !current)}
             >
               <CalendarDays size={14} />
               <span>高级排期</span>
             </button>
-            {isScheduleOpen && (
+            {canEditSchedule && isScheduleOpen && (
               <div className="task-detail-schedule-fields">
                 <label className="task-type-field">
                   <span>类型</span>

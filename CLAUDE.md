@@ -97,4 +97,8 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 
 ## 版本
 
-当前版本 **1.0.1**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
+当前版本 **1.0.2**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
+
+## 发布
+
+发布流程由 `.github/workflows/release.yml` 驱动：推送 `v*` tag（或手动 dispatch）后在 `windows-latest` 上跑 `typecheck` + `test`，再用 `tauri-apps/tauri-action@v0.6.2` 构建、签名并发布 GitHub Release。Release body 由 `.github/scripts/extract-release-notes.mjs` 从 `CHANGELOG.md` 提取，updater `latest.json` 指向 `se-treasurew/TinyNote` 的 latest release（见 `tauri.conf.json` 的 updater endpoints）。签名密钥 `TAURI_SIGNING_PRIVATE_KEY` / 密码为仓库 secret，本地需自行配置才能产出带 `.sig` 的 updater 制品。升级器公钥已内嵌在 `tauri.conf.json` 的 `plugins.updater.pubkey`。

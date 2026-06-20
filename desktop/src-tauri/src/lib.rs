@@ -262,5 +262,13 @@ fn migrations() -> Vec<Migration> {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "add_tasks_parent_task_id_index",
+            sql: r#"
+            CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);
+        "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }
