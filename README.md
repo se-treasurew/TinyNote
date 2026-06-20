@@ -1,11 +1,12 @@
 # TinyNote 小笺
 
-TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + React + TypeScript + SQLite 构建。界面简洁，毛玻璃主题，本地离线可用。当前版本 **v1.0.1**。
+TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + React + TypeScript + SQLite 构建。界面简洁，毛玻璃主题，本地离线可用。当前版本 **v1.1.0**。
 
 ## 功能
 
 - **日期视图**：未来 N 天日期条（默认 7 天，可选 3/7/14），有活跃任务的日期显示红点，今日高亮，选中日期自动滚动到可视区
 - **三种任务类型**：普通（仅当天）、每日（范围显示、每天进度清零）、多日（范围显示、进度当日及之前继承）
+- **子任务**：在任务右键菜单中添加子任务，缩进展示在母任务下方并可单独完成；母任务行显示「x/y」完成进度徽标；删除、顺延、改期母任务时子任务自动跟随
 - **任务操作**：快速添加、内联编辑、进度条、完成/恢复、逐条删除、任务详情与高级排期
 - **顺延**：单任务延期到指定日期、批量顺延当日活跃任务到次日，并可清除延期标识与历史
 - **任务管理面板**：集中创建与管理每日/多日任务（底部栏仅快速添加普通任务）
@@ -17,6 +18,8 @@ TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + Rea
 ## 下载与安装
 
 在 [GitHub Releases](https://github.com/se-treasurew/TinyNote/releases) 下载最新的 `TinyNote_*_x64-setup.exe` 并运行。应用内点击标题栏“小笺”可打开关于面板并检查更新。
+
+> ⚠️ **不支持降级安装**：升级到新版本后，请勿安装更旧的安装包。TinyNote 的数据库迁移只增不删，降级会导致应用无法启动。如必须运行旧版本，需先卸载当前版本并删除本地数据库（会丢失全部本地数据）后全新安装。
 
 更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -93,9 +96,11 @@ Repository（SQL 查询）→ Service（业务逻辑）→ Store（Zustand）→
 
 ## 版本
 
-当前版本 **1.0.1**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致；标题栏版本号通过 Tauri 运行时 `getVersion()` 读取，无需手动同步。
+当前版本 **1.1.0**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致；标题栏版本号通过 Tauri 运行时 `getVersion()` 读取，无需手动同步。
 
 发布时需先在 `CHANGELOG.md` 增加对应版本章节，再推送同版本的 `v*` 标签。GitHub Actions 会构建 NSIS/MSI、签名文件和 `latest.json`，并将该章节作为 Release 与应用内更新说明。
+
+> 不支持降级安装：SQLite 迁移只增不删，降级会因旧版本不识别新迁移而启动失败。详见 [CHANGELOG.md](CHANGELOG.md) 各版本的「升级与降级」说明。
 
 ## 许可
 
