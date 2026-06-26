@@ -73,7 +73,7 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 |------|:--:|:--:|:--:|
 | 跨日显示 | 仅当天 | [开始, 结束] 范围 | [开始, 结束] 范围 |
 | 进度顺延 | ❌ 永不 | ❌ 每天清零 | ✅ 当日及之前继承 |
-| 完成机制 | 改任务自身状态 | 写 per-date progress entry | 写 per-date progress entry |
+| 完成机制 | 原日期改任务自身状态；延期/已有进度日期写 per-date progress entry | 写 per-date progress entry | 写 per-date progress entry |
 
 核心逻辑在 `src/services/taskOccurrence.ts`：`shouldShowTaskOnDate` 控制可见性，`resolveInheritedProgressEntry` 控制多日进度顺延（仅 multi_day + `date <= today`，未来日期不继承；硬编码行为，不再依赖设置项）。注意：`carryProgressForward` 设置已从 `AppSettings` 移除，CLAUDE.md 早期版本曾记载该设置，现已不适用。
 
@@ -86,6 +86,29 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 - `postponeTask`（store）/ `taskService.postponeTask` 执行单条顺延，`postponeTasksForDate` 批量处理一个日期下所有符合条件任务
 - `clearTaskPostponements` 清除任务全部延期标识与历史，但不回滚截止日期或独立进度记录
 
+**子任务级联**：`taskService.postponeTask` 延期一个任务时**双向级联**——向下用 `collectDescendants` 延期全部后代（子、孙），向上沿 `parentTaskId` 链延期每个符合资格的祖先（仅 `postponeSingle` 自身，不重复向下）。延期子任务会连带母任务及祖先，延期母任务会连带全部后代。兄弟节点不连带。`collectDescendants` 带 visited 集合防 `parent_task_id` 循环。
+
+## 子任务系统
+
+任务树最多**三层**（母 → 子 → 孙），通过 `tasks.parent_task_id` 表达，migration 7 已加索引。
+
+- **创建**：`taskService.addTask` 用 `depthOf` 计算候选父任务深度，深度 ≥ 2 时拒绝（孙不能再加子）。子任务继承父的 `sourceType/taskDate/endDate`。`CreateTaskInput.parentTaskId` 仅创建时设，`UpdateTaskInput` 不含。
+- **分组**：`taskWorkflow.groupTasksWithSubtasks` 把单日扁平 occurrence 列表递归构建为 `TaskTreeNode[]`（`subtasks` 是递归节点数组）。孤儿子任务（父缺失/越界）升为顶层。
+- **徽标**：`subtaskBadge` 只数**直接**子任务（孙不计入母的徽标）。含子任务的任务在标题行右侧显示 `x/y` 徽标，不显示进度条；只有叶子任务（无子任务）显示可拖动进度条。
+- **完成推进**：`completeTask`/`restoreTask` 末尾调 `recomputeAncestorProgress` 沿祖先链上溯——按直接子任务完成比例重算每个祖先的进度。daily/multi_day 祖先写当日 progress entry 的 `percent`（全完成置 `completed`）；manual 祖先全完成时自动 `applyComplete`、否则 `applyRestore`。manual 子任务看 `task.status`，daily/multi_day 子任务看当日 entry status。
+- **折叠**：`MainPage` 用 `collapsedParentIds: Set<string>`（会话内、非持久化）控制每节点子树显示；`TaskItem` 有子任务时在复选框前显示 `▶/▼` 折叠按钮。
+- **添加交互**：子任务添加行有确认/取消图标按钮，Enter 提交、Escape 取消；切换日期、折叠父任务或打开底部快速添加时会退出子任务添加态。
+- **级联**：`deleteTask` 递归软删全部后代；`updateTask` 排期变更（仅顶层 `depth 0` 可编辑排期）递归传播到全部后代。
+- **Store 刷新**：`completeTask`/`restoreTask`/`deleteTask` 成功后 `loadTasks` reload 可见窗口，确保父进度、徽标、后代在所有日期刷新。
+
+## 延期 occurrence 完成语义
+
+`TaskOccurrence.taskDate` 是展示日期，`definitionTaskDate` 是任务定义日期，`occurrenceDate` 是状态/进度操作日期。完成或恢复延期副本时必须传 `occurrenceDate`，不要用定义日期回写。
+
+- 普通任务在原始日期且没有直接 progress entry 时，仍通过任务自身 `status` 完成/恢复，兼容旧数据。
+- 普通任务在延期目标日期或已有直接 progress entry 的日期完成/恢复时，写该日期 `task_progress_entries`，原日期 occurrence 不随之完成。
+- 子任务完成后，`recomputeAncestorProgress` 按同一个 occurrence 日期重算祖先进度，避免延期子任务在目标日期完成时误改原日期父任务。
+
 ## 关键技术细节
 
 - **Tauri 插件**：SQL、window-state、notification、autostart、updater、process、opener。确认弹窗使用自研 `ConfirmDialog`；权限定义在 `src-tauri/capabilities/default.json`。
@@ -97,7 +120,7 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 
 ## 版本
 
-当前版本 **1.1.0**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
+当前版本 **1.2.0**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
 
 ## 发布
 

@@ -262,6 +262,123 @@ describe('task service occurrence and progress behavior', () => {
     expect(occurrence.postponementHistory).toEqual([history]);
   });
 
+  it('completes a postponed manual occurrence by writing a target-date progress entry', async () => {
+    const task = baseTask({
+      sourceType: 'manual',
+      taskDate: '2026-06-26',
+      postponedAt: '2026-06-26T01:00:00.000Z',
+    });
+    const history = taskPostponement({
+      fromDate: '2026-06-26',
+      toDate: '2026-06-27',
+    });
+    mocks.findById.mockResolvedValue(task);
+    mocks.listPostponements.mockResolvedValue([history]);
+    mocks.findProgressEntry.mockResolvedValue(null);
+
+    const occurrence = await taskService.completeTask('task-1', '2026-06-27');
+
+    expect(mocks.save).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: 'task-1',
+      status: 'completed',
+    }));
+    expect(mocks.upsertProgressEntry).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      progressDate: '2026-06-27',
+      percent: 100,
+      status: 'completed',
+    }));
+    expect(occurrence.taskDate).toBe('2026-06-27');
+    expect(occurrence.status).toBe('completed');
+    expect(occurrence.postponementHistory).toEqual([history]);
+  });
+
+  it('keeps original manual completion behavior on the definition date without a direct progress entry', async () => {
+    const task = baseTask({ sourceType: 'manual', taskDate: '2026-06-26' });
+    mocks.findById.mockResolvedValue(task);
+    mocks.findProgressEntry.mockResolvedValue(null);
+
+    const occurrence = await taskService.completeTask('task-1', '2026-06-26');
+
+    expect(mocks.upsertProgressEntry).not.toHaveBeenCalled();
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'task-1',
+      status: 'completed',
+      taskDate: '2026-06-26',
+    }));
+    expect(occurrence.status).toBe('completed');
+  });
+
+  it('updates an existing manual progress entry instead of the task definition', async () => {
+    const task = baseTask({ sourceType: 'manual', taskDate: '2026-06-26' });
+    mocks.findById.mockResolvedValue(task);
+    mocks.findProgressEntry.mockResolvedValue(progressEntry({
+      id: 'progress-target',
+      progressDate: '2026-06-27',
+      percent: 35,
+      status: 'active',
+    }));
+
+    await taskService.completeTask('task-1', '2026-06-27');
+    await taskService.restoreTask('task-1', '2026-06-27');
+
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.upsertProgressEntry).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      id: 'progress-target',
+      progressDate: '2026-06-27',
+      percent: 100,
+      status: 'completed',
+    }));
+    expect(mocks.upsertProgressEntry).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      id: 'progress-target',
+      progressDate: '2026-06-27',
+      percent: 0,
+      status: 'active',
+    }));
+  });
+
+  it('recomputes a postponed manual subtask parent on the target occurrence date', async () => {
+    const parent = baseTask({
+      id: 'parent',
+      sourceType: 'manual',
+      taskDate: '2026-06-26',
+    });
+    const child = baseTask({
+      id: 'child',
+      parentTaskId: 'parent',
+      sourceType: 'manual',
+      taskDate: '2026-06-26',
+    });
+    mocks.findById.mockImplementation(async (id: string) => {
+      if (id === 'child') return child;
+      if (id === 'parent') return parent;
+      return null;
+    });
+    mocks.findProgressEntry.mockResolvedValue(null);
+    mocks.listByParentId.mockImplementation(async (id: string) => (id === 'parent' ? [child] : []));
+    mocks.listProgressEntries.mockResolvedValue([
+      progressEntry({
+        taskId: 'child',
+        progressDate: '2026-06-27',
+        percent: 100,
+        status: 'completed',
+      }),
+    ]);
+
+    await taskService.completeTask('child', '2026-06-27');
+
+    expect(mocks.save).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: 'parent',
+      status: 'completed',
+    }));
+    expect(mocks.upsertProgressEntry).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'parent',
+      progressDate: '2026-06-27',
+      percent: 100,
+      status: 'completed',
+    }));
+  });
+
   it('clears all postponement history without changing dates or progress', async () => {
     const task = baseTask({
       sourceType: 'multi_day',
@@ -437,35 +554,42 @@ describe('task service occurrence and progress behavior', () => {
     await expect(taskService.postponeTask('task-1', '2026-06-18', '2026-06-18')).rejects.toThrow('Postpone target date must be after source date');
   });
 
-  it('creates a subtask that inherits the parent schedule and rejects nesting beyond one level', async () => {
+  it('allows subtasks up to three levels and rejects a fourth', async () => {
     const parent = baseTask({
       id: 'parent',
       sourceType: 'multi_day',
       taskDate: '2026-06-16',
       endDate: '2026-06-20',
     });
-    mocks.findById.mockResolvedValue(parent);
+    const child = baseTask({ id: 'child', parentTaskId: 'parent', sourceType: 'multi_day', taskDate: '2026-06-16', endDate: '2026-06-20' });
+    const grandchild = baseTask({ id: 'grandchild', parentTaskId: 'child', sourceType: 'multi_day', taskDate: '2026-06-16', endDate: '2026-06-20' });
+    // findById returns the right ancestor for each id so depthOf can walk up.
+    mocks.findById.mockImplementation(async (id: string) => {
+      if (id === 'parent') return parent;
+      if (id === 'child') return child;
+      if (id === 'grandchild') return grandchild;
+      return null;
+    });
 
-    const occurrence = await taskService.addTask({ title: '子项', parentTaskId: 'parent', taskDate: '2026-06-18' });
-
-    // The stored definition inherits the parent's range start (06-16)...
+    // Level 1: child under parent — inherits parent schedule.
+    const childOccurrence = await taskService.addTask({ title: '子项', parentTaskId: 'parent', taskDate: '2026-06-18' });
     expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({
       parentTaskId: 'parent',
       sourceType: 'multi_day',
       taskDate: '2026-06-16',
       endDate: '2026-06-20',
     }));
-    // ...but the returned occurrence lands on the caller's viewing date so the
-    // optimistic merge shows it immediately under the parent (no reload needed).
-    expect(occurrence.taskDate).toBe('2026-06-18');
-    expect(occurrence.definitionTaskDate).toBe('2026-06-16');
+    expect(childOccurrence.taskDate).toBe('2026-06-18');
 
-    // A subtask (parentTaskId set) cannot itself have children.
-    const subParent = baseTask({ id: 'child', parentTaskId: 'parent' });
-    mocks.findById.mockResolvedValue(subParent);
+    // Level 2: grandchild under child — allowed.
+    mocks.insert.mockClear();
+    await taskService.addTask({ title: '孙项', parentTaskId: 'child', taskDate: '2026-06-18' });
+    expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ parentTaskId: 'child' }));
+
+    // Level 3: great-grandchild under grandchild — rejected (max 3 levels).
     await expect(
-      taskService.addTask({ title: '孙项', parentTaskId: 'child', taskDate: '2026-06-18' }),
-    ).rejects.toThrow('one level only');
+      taskService.addTask({ title: '曾孙', parentTaskId: 'grandchild', taskDate: '2026-06-18' }),
+    ).rejects.toThrow('three levels');
   });
 
   it('rejects creating a subtask when the parent does not exist', async () => {
@@ -515,6 +639,27 @@ describe('task service occurrence and progress behavior', () => {
     expect(mocks.save).toHaveBeenCalledTimes(2); // parent + active child
     expect(mocks.upsertPostponement).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'child-active' }));
     expect(mocks.upsertPostponement).not.toHaveBeenCalledWith(expect.objectContaining({ taskId: 'child-done' }));
+  });
+
+  it('cascades postpone up to ancestors when postponing a subtask', async () => {
+    const grandparent = baseTask({ id: 'grandparent', sourceType: 'manual', taskDate: '2026-06-18' });
+    const parent = baseTask({ id: 'parent', parentTaskId: 'grandparent', sourceType: 'manual', taskDate: '2026-06-18' });
+    const child = baseTask({ id: 'child', parentTaskId: 'parent', sourceType: 'manual', taskDate: '2026-06-18' });
+    // findById walks the ancestor chain: child first, then parent, then grandparent.
+    mocks.findById.mockImplementation(async (id: string) => {
+      if (id === 'child') return child;
+      if (id === 'parent') return parent;
+      if (id === 'grandparent') return grandparent;
+      return null;
+    });
+    mocks.findProgressEntry.mockResolvedValue(null);
+
+    await taskService.postponeTask('child', '2026-06-18', '2026-06-20');
+
+    // The child itself plus its parent and grandparent are all postponed.
+    expect(mocks.upsertPostponement).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'child' }));
+    expect(mocks.upsertPostponement).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'parent' }));
+    expect(mocks.upsertPostponement).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'grandparent' }));
   });
 
   it('propagates schedule changes to subtasks but skips non-schedule updates', async () => {

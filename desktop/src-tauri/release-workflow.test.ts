@@ -25,12 +25,12 @@ describe('GitHub release workflow', () => {
       encoding: 'utf8',
     });
 
+    expect(changelog).toContain('## [1.2.0]');
     expect(changelog).toContain('## [1.1.0]');
-    expect(changelog).toContain('## [1.0.1]');
     expect(changelog).toContain('## [1.0.0]');
-    expect(notes).toContain('子任务功能');
-    expect(notes).toContain('不支持降级');
-    expect(notes).not.toContain('## [1.0.1]');
+    expect(notes).toContain('二级子任务');
+    expect(notes).toContain('透明度全范围');
+    expect(notes).not.toContain('## [1.1.0]');
     expect(notes).not.toContain('## [1.0.0]');
   });
 });

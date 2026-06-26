@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   postponeTask: vi.fn(),
   clearTaskPostponements: vi.fn(),
   completeTask: vi.fn(),
+  restoreTask: vi.fn(),
   deleteTask: vi.fn(),
 }));
 
@@ -22,7 +23,7 @@ vi.mock('../services/taskService', () => ({
     postponeTask: mocks.postponeTask,
     clearTaskPostponements: mocks.clearTaskPostponements,
     completeTask: mocks.completeTask,
-    restoreTask: vi.fn(),
+    restoreTask: mocks.restoreTask,
     deleteTask: mocks.deleteTask,
   },
 }));
@@ -100,6 +101,7 @@ describe('task store date window behavior', () => {
     }));
     mocks.clearTaskPostponements.mockResolvedValue(baseTask({ postponedAt: null, postponementHistory: [] }));
     mocks.completeTask.mockResolvedValue(baseTask({ status: 'completed' }));
+    mocks.restoreTask.mockResolvedValue(baseTask({ status: 'active' }));
     mocks.deleteTask.mockResolvedValue(baseTask({ status: 'deleted', deletedAt: '2026-06-18T01:00:00.000Z' }));
     useTaskStore.setState({
       tasks: [],
@@ -437,12 +439,16 @@ describe('task store date window behavior', () => {
 
   it('passes the occurrence date when completing a recurring task', async () => {
     const task = baseTask({ id: 'daily-1', sourceType: 'daily', taskDate: '2026-06-18' });
-    mocks.completeTask.mockResolvedValue(baseTask({
+    const completed = baseTask({
       id: 'daily-1',
       sourceType: 'daily',
       taskDate: '2026-06-18',
       status: 'completed',
-    }));
+    });
+    mocks.completeTask.mockResolvedValue(completed);
+    // completeTask now reloads the visible window so ancestor progress refreshes;
+    // the reload must return the completed occurrence.
+    mocks.loadVisibleTasks.mockResolvedValue([completed]);
     useTaskStore.setState({
       tasks: [task],
       tasksByDate: { '2026-06-18': [task] },
@@ -472,6 +478,13 @@ describe('task store date window behavior', () => {
       progressPercent: 100,
       postponementHistory: history,
     }));
+    // completeTask reloads the visible window; return the completed occurrence.
+    mocks.loadVisibleTasks.mockResolvedValue([baseTask({
+      ...task,
+      status: 'completed',
+      progressPercent: 100,
+      postponementHistory: history,
+    })]);
     useTaskStore.setState({
       tasks: [task],
       tasksByDate: { '2026-06-20': [task] },
@@ -485,6 +498,65 @@ describe('task store date window behavior', () => {
     const updated = useTaskStore.getState().tasksByDate['2026-06-20']?.[0];
     expect(updated?.status).toBe('completed');
     expect(updated?.postponementHistory).toEqual(history);
+  });
+
+  it('completes a postponed manual occurrence on its occurrence date instead of its original date', async () => {
+    const task = baseTask({
+      id: 'task-1',
+      taskDate: '2026-06-26',
+      definitionTaskDate: '2026-06-26',
+      occurrenceDate: '2026-06-27',
+      postponedAt: '2026-06-26T01:00:00.000Z',
+      postponedFromDate: '2026-06-26',
+      postponedToDate: '2026-06-27',
+      postponementHistory: [taskPostponement({ fromDate: '2026-06-26', toDate: '2026-06-27' })],
+    });
+    const servicePending = deferred<TaskOccurrence>();
+    mocks.completeTask.mockReturnValue(servicePending.promise);
+    useTaskStore.setState({
+      tasks: [task],
+      tasksByDate: { '2026-06-27': [task] },
+      selectedDate: '2026-06-27',
+      visibleDates: ['2026-06-26', '2026-06-27'],
+      visibleStartDate: '2026-06-26',
+      visibleDays: 2,
+    });
+
+    const completion = useTaskStore.getState().completeTask('task-1', '2026-06-27');
+
+    expect(mocks.completeTask).toHaveBeenCalledWith('task-1', '2026-06-27');
+    expect(useTaskStore.getState().tasksByDate['2026-06-27']?.[0]?.status).toBe('completed');
+    expect(useTaskStore.getState().tasksByDate['2026-06-26'] ?? []).toEqual([]);
+
+    servicePending.resolve(baseTask({ ...task, taskDate: '2026-06-27', occurrenceDate: '2026-06-27', status: 'completed' }));
+    await completion;
+  });
+
+  it('restores a postponed manual occurrence on its occurrence date', async () => {
+    const task = baseTask({
+      id: 'task-1',
+      taskDate: '2026-06-26',
+      definitionTaskDate: '2026-06-26',
+      occurrenceDate: '2026-06-27',
+      status: 'completed',
+      postponedAt: '2026-06-26T01:00:00.000Z',
+      postponedFromDate: '2026-06-26',
+      postponedToDate: '2026-06-27',
+      postponementHistory: [taskPostponement({ fromDate: '2026-06-26', toDate: '2026-06-27' })],
+    });
+    mocks.loadVisibleTasks.mockResolvedValue([baseTask({ ...task, taskDate: '2026-06-27', occurrenceDate: '2026-06-27', status: 'active' })]);
+    useTaskStore.setState({
+      tasks: [task],
+      tasksByDate: { '2026-06-27': [task] },
+      selectedDate: '2026-06-27',
+      visibleDates: ['2026-06-26', '2026-06-27'],
+      visibleStartDate: '2026-06-26',
+      visibleDays: 2,
+    });
+
+    await useTaskStore.getState().restoreTask('task-1', '2026-06-27');
+
+    expect(mocks.restoreTask).toHaveBeenCalledWith('task-1', '2026-06-27');
   });
 
   it('updates task progress in the current occurrence', async () => {
@@ -598,12 +670,14 @@ describe('task store date window behavior', () => {
 
     const selectedAfterNavigation = useTaskStore.getState().selectedDate;
     const task = baseTask({ id: 'task-1', taskDate: selectedAfterNavigation, status: 'active' });
-    mocks.completeTask.mockResolvedValue(baseTask({
+    const completedTask = baseTask({
       id: 'task-1',
       taskDate: selectedAfterNavigation,
       status: 'completed',
-    }));
-    mocks.loadVisibleTasks.mockResolvedValue([task]);
+    });
+    mocks.completeTask.mockResolvedValue(completedTask);
+    // completeTask reloads the visible window; return the completed occurrence.
+    mocks.loadVisibleTasks.mockResolvedValue([completedTask]);
     useTaskStore.setState({
       tasks: [task],
       tasksByDate: { [selectedAfterNavigation]: [task] },
@@ -702,22 +776,31 @@ describe('task store date window behavior', () => {
     expect(remaining.map((task) => task.id)).toEqual([]);
   });
 
-  it('completes a subtask occurrence by id without affecting the parent', async () => {
+  it('completes a subtask and refreshes the parent via reload', async () => {
     const parent = baseTask({ id: 'parent', taskDate: '2026-06-18' });
-    const child = baseTask({ id: 'child', parentTaskId: 'parent', taskDate: '2026-06-18' });
-    mocks.completeTask.mockResolvedValue(baseTask({ id: 'child', status: 'completed', taskDate: '2026-06-18' }));
+    const childA = baseTask({ id: 'child-a', parentTaskId: 'parent', taskDate: '2026-06-18' });
+    const childB = baseTask({ id: 'child-b', parentTaskId: 'parent', taskDate: '2026-06-18' });
+    mocks.completeTask.mockResolvedValue(baseTask({ id: 'child-a', status: 'completed', taskDate: '2026-06-18' }));
+    // completeTask reloads; the reload reflects child-a done, child-b active,
+    // and the parent still active (only half its children are done).
+    mocks.loadVisibleTasks.mockResolvedValue([
+      parent,
+      { ...childA, status: 'completed' as const },
+      childB,
+    ]);
     useTaskStore.setState({
-      tasks: [parent, child],
-      tasksByDate: { '2026-06-18': [parent, child] },
+      tasks: [parent, childA, childB],
+      tasksByDate: { '2026-06-18': [parent, childA, childB] },
       selectedDate: '2026-06-18',
     });
 
-    await useTaskStore.getState().completeTask('child');
+    await useTaskStore.getState().completeTask('child-a');
 
     const byId = Object.fromEntries(
       (useTaskStore.getState().tasksByDate['2026-06-18'] ?? []).map((task) => [task.id, task]),
     );
-    expect(byId.child?.status).toBe('completed');
+    expect(byId['child-a']?.status).toBe('completed');
+    // Parent stays active while a child is still pending.
     expect(byId.parent?.status).toBe('active');
   });
 });

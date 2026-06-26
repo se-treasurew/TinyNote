@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { CalendarClock, Check, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { AboutPanel } from '../components/AboutPanel';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { TaskManagePanel } from '../components/TaskManagePanel';
@@ -10,13 +10,14 @@ import { useTaskStore } from '../stores/taskStore';
 import { todayIsoDate } from '../utils/date';
 import { useUiStore } from '../stores/uiStore';
 import { isBatchPostponeEligibleTask } from '../services/taskScheduling';
-import { groupTasksWithSubtasks, subtaskBadge } from '../services/taskWorkflow';
+import { groupTasksWithSubtasks, subtaskBadge, type TaskTreeNode } from '../services/taskWorkflow';
 
 export function MainPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
   const [addingSubtaskParentId, setAddingSubtaskParentId] = useState<string | null>(null);
   const [subtaskTitle, setSubtaskTitle] = useState('');
+  const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
   const settings = useSettingsStore((state) => state.settings);
   const tasks = useTaskStore((state) => state.tasks);
   const tasksByDate = useTaskStore((state) => state.tasksByDate);
@@ -68,6 +69,7 @@ export function MainPage() {
   async function selectAdjacentDate(direction: -1 | 1) {
     await navigateDate(direction, settings.visibleDays);
     setIsAdding(false);
+    cancelAddSubtask();
   }
 
   async function submitQuickTask() {
@@ -98,6 +100,22 @@ export function MainPage() {
     setSubtaskTitle('');
   }
 
+  function toggleCollapse(id: string) {
+    const isCollapsing = !collapsedParentIds.has(id);
+    setCollapsedParentIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    if (isCollapsing) {
+      cancelAddSubtask();
+    }
+  }
+
   async function submitSubtask(parentId: string) {
     const title = subtaskTitle.trim();
     if (!title) {
@@ -107,6 +125,60 @@ export function MainPage() {
     // sourceType/taskDate/endDate are inherited from the parent server-side.
     await addTask({ title, parentTaskId: parentId, taskDate: selectedDate });
     cancelAddSubtask();
+  }
+
+  function renderTree(node: TaskTreeNode, depth: number) {
+    const hasSubtasks = node.subtasks.length > 0;
+    const badge = hasSubtasks ? subtaskBadge(node.subtasks.map((child) => child.task)) : undefined;
+    const isCollapsed = collapsedParentIds.has(node.task.id);
+    return (
+      <div className="task-tree" key={node.task.id}>
+        <TaskItem
+          task={node.task}
+          depth={depth}
+          subtaskBadge={badge}
+          hasSubtasks={hasSubtasks}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={() => toggleCollapse(node.task.id)}
+          onRequestAddSubtask={() => startAddSubtask(node.task.id)}
+        />
+        {!isCollapsed && node.subtasks.map((child) => renderTree(child, depth + 1))}
+        {!isCollapsed && addingSubtaskParentId === node.task.id && (
+          <div className={`subtask-add-row subtask-add-row--depth-${Math.min(depth + 1, 2)}`}>
+            <input
+              className="subtask-add-input"
+              autoFocus
+              aria-label="添加子任务"
+              value={subtaskTitle}
+              onChange={(event) => setSubtaskTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void submitSubtask(node.task.id);
+                if (event.key === 'Escape') cancelAddSubtask();
+              }}
+              placeholder="添加子任务"
+            />
+            <button
+              type="button"
+              className="subtask-add-button confirm"
+              aria-label="确认添加子任务"
+              title="确认添加子任务"
+              onClick={() => void submitSubtask(node.task.id)}
+            >
+              <Check size={14} />
+            </button>
+            <button
+              type="button"
+              className="subtask-add-button cancel"
+              aria-label="取消添加子任务"
+              title="取消添加子任务"
+              onClick={cancelAddSubtask}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -135,6 +207,7 @@ export function MainPage() {
               onClick={() => {
                 setSelectedDate(date);
                 setIsAdding(false);
+                cancelAddSubtask();
               }}
             >
               <span>{formatWeekdayLabel(date)}</span>
@@ -156,39 +229,18 @@ export function MainPage() {
           type="button"
           className={`date-today ${selectedDate === todayIsoDate() ? 'is-today' : ''}`}
           aria-label="回到今天"
-          onClick={() => void goToToday(settings.visibleDays)}
+          onClick={() => {
+            setIsAdding(false);
+            cancelAddSubtask();
+            void goToToday(settings.visibleDays);
+          }}
         >
           今天
         </button>
       </section>
       <section className="task-board" aria-label={`${selectedDate} 任务`}>
         <div className="task-list active-list" role="list" aria-label="未完成任务">
-          {activeTrees.map((tree) => (
-            <div className="task-tree" key={tree.task.id}>
-              <TaskItem
-                task={tree.task}
-                subtaskBadge={tree.subtasks.length > 0 ? subtaskBadge(tree.subtasks) : undefined}
-                onRequestAddSubtask={() => startAddSubtask(tree.task.id)}
-              />
-              {tree.subtasks.map((subtask) => (
-                <TaskItem key={subtask.id} task={subtask} isSubtask />
-              ))}
-              {addingSubtaskParentId === tree.task.id && (
-                <input
-                  className="subtask-add-input"
-                  autoFocus
-                  aria-label="添加子任务"
-                  value={subtaskTitle}
-                  onChange={(event) => setSubtaskTitle(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void submitSubtask(tree.task.id);
-                    if (event.key === 'Escape') cancelAddSubtask();
-                  }}
-                  placeholder="添加子任务"
-                />
-              )}
-            </div>
-          ))}
+          {activeTrees.map((tree) => renderTree(tree, 0))}
           {activeTrees.length === 0 && <p className="empty-copy">暂无待办</p>}
         </div>
         {doneTrees.length > 0 && (
@@ -198,18 +250,7 @@ export function MainPage() {
               <strong>{doneTrees.length}</strong>
             </header>
             <div className="task-list completed-list" role="list">
-              {doneTrees.map((tree) => (
-                <div className="task-tree" key={tree.task.id}>
-                  <TaskItem
-                    task={tree.task}
-                    subtaskBadge={tree.subtasks.length > 0 ? subtaskBadge(tree.subtasks) : undefined}
-                    onRequestAddSubtask={() => startAddSubtask(tree.task.id)}
-                  />
-                  {tree.subtasks.map((subtask) => (
-                    <TaskItem key={subtask.id} task={subtask} isSubtask />
-                  ))}
-                </div>
-              ))}
+              {doneTrees.map((tree) => renderTree(tree, 0))}
             </div>
           </section>
         )}
@@ -237,7 +278,14 @@ export function MainPage() {
             </button>
           </>
         ) : (
-          <button type="button" className="bottom-action add" onClick={() => setIsAdding(true)}>
+          <button
+            type="button"
+            className="bottom-action add"
+            onClick={() => {
+              cancelAddSubtask();
+              setIsAdding(true);
+            }}
+          >
             <Plus size={20} />
             <span>添加</span>
           </button>

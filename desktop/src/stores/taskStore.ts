@@ -36,8 +36,8 @@ interface TaskState {
   postponeTask: (id: string, fromDate: string, toDate: string, sourceProgressPercent?: number) => Promise<void>;
   postponeTasksForDate: (date: string) => Promise<void>;
   clearTaskPostponements: (id: string) => Promise<void>;
-  completeTask: (id: string) => Promise<void>;
-  restoreTask: (id: string) => Promise<void>;
+  completeTask: (id: string, occurrenceDate?: string) => Promise<void>;
+  restoreTask: (id: string, occurrenceDate?: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   setSelectedDate: (date: string) => void;
   getActiveCountByDate: (date: string) => number;
@@ -79,13 +79,19 @@ function taskCollectionPatch(tasks: TaskOccurrence[]) {
   };
 }
 
+function resolveDisplayDate(task: TaskOccurrence, visibleDates: string[]): string {
+  return visibleDates.includes(task.occurrenceDate) ? task.occurrenceDate : task.taskDate;
+}
+
 function mergeVisibleTask(tasks: TaskOccurrence[], task: TaskOccurrence, visibleDates: string[]): TaskOccurrence[] {
-  const withoutTask = tasks.filter((item) => !(item.id === task.id && item.taskDate === task.taskDate));
-  if (task.status === 'deleted' || !visibleDates.includes(task.taskDate)) {
+  const displayDate = resolveDisplayDate(task, visibleDates);
+  const visibleTask = task.taskDate === displayDate ? task : { ...task, taskDate: displayDate };
+  const withoutTask = tasks.filter((item) => !(item.id === visibleTask.id && resolveDisplayDate(item, visibleDates) === displayDate));
+  if (visibleTask.status === 'deleted' || !visibleDates.includes(displayDate)) {
     return withoutTask;
   }
 
-  return [...withoutTask, task];
+  return [...withoutTask, visibleTask];
 }
 
 function mergeVisibleTaskDefinition(tasks: TaskOccurrence[], updated: TaskOccurrence): TaskOccurrence[] {
@@ -138,12 +144,22 @@ function applyDefinitionUpdateInput(tasks: TaskOccurrence[], id: string, input: 
   });
 }
 
-// Removing a parent must also drop its subtasks from the visible state. The
-// service soft-deletes children server-side, but deleteTask's success path
-// does not reload, so without this the children would linger until the next
-// load.
-function removeTaskAndChildren(tasks: TaskOccurrence[], id: string): TaskOccurrence[] {
-  return tasks.filter((task) => task.id !== id && task.parentTaskId !== id);
+// Removing a parent must also drop all its descendants from the visible state.
+// The service soft-deletes descendants server-side, so collect the whole
+// subtree by parentTaskId transitively and filter them out.
+function removeTaskAndDescendants(tasks: TaskOccurrence[], id: string): TaskOccurrence[] {
+  const removeIds = new Set<string>([id]);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const task of tasks) {
+      if (task.parentTaskId && removeIds.has(task.parentTaskId) && !removeIds.has(task.id)) {
+        removeIds.add(task.id);
+        added = true;
+      }
+    }
+  }
+  return tasks.filter((task) => !removeIds.has(task.id));
 }
 
 function invalidatePendingLoads() {
@@ -152,7 +168,9 @@ function invalidatePendingLoads() {
 }
 
 function findCurrentOccurrence(tasks: TaskOccurrence[], id: string, selectedDate: string): TaskOccurrence | undefined {
-  return tasks.find((task) => task.id === id && task.taskDate === selectedDate) ?? tasks.find((task) => task.id === id);
+  return tasks.find((task) => task.id === id && task.occurrenceDate === selectedDate)
+    ?? tasks.find((task) => task.id === id && task.taskDate === selectedDate)
+    ?? tasks.find((task) => task.id === id);
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -349,36 +367,42 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  async completeTask(id) {
+  async completeTask(id, occurrenceDate) {
     invalidatePendingLoads();
     set({ isLoading: false });
-    const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
+    const targetDate = occurrenceDate ?? get().selectedDate;
+    const current = findCurrentOccurrence(get().tasks, id, targetDate);
     if (current) {
-      const optimistic = applyComplete(current, new Date().toISOString());
+      const optimistic = applyComplete({ ...current, taskDate: targetDate, occurrenceDate: targetDate }, new Date().toISOString());
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
     }
 
     try {
-      const updated = await taskService.completeTask(id, current?.taskDate ?? get().selectedDate);
-      set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
+      await taskService.completeTask(id, current?.occurrenceDate ?? targetDate);
+      // Completing a subtask recomputes ancestor progress server-side, so
+      // reload to refresh the parent's badge and percent on every visible date.
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
     }
   },
 
-  async restoreTask(id) {
+  async restoreTask(id, occurrenceDate) {
     invalidatePendingLoads();
     set({ isLoading: false });
-    const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
+    const targetDate = occurrenceDate ?? get().selectedDate;
+    const current = findCurrentOccurrence(get().tasks, id, targetDate);
     if (current) {
-      const optimistic = applyRestore(current, new Date().toISOString());
+      const optimistic = applyRestore({ ...current, taskDate: targetDate, occurrenceDate: targetDate }, new Date().toISOString());
       set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, optimistic, state.visibleDates)));
     }
 
     try {
-      const updated = await taskService.restoreTask(id, current?.taskDate ?? get().selectedDate);
-      set((state) => taskCollectionPatch(mergeVisibleTask(state.tasks, updated, state.visibleDates)));
+      await taskService.restoreTask(id, current?.occurrenceDate ?? targetDate);
+      // Restoring a subtask recomputes ancestor progress server-side; reload to
+      // refresh the parent's badge and percent on every visible date.
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;
@@ -390,12 +414,14 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: false });
     const current = findCurrentOccurrence(get().tasks, id, get().selectedDate);
     if (current) {
-      set((state) => taskCollectionPatch(removeTaskAndChildren(state.tasks, id)));
+      set((state) => taskCollectionPatch(removeTaskAndDescendants(state.tasks, id)));
     }
 
     try {
       await taskService.deleteTask(id);
-      set((state) => taskCollectionPatch(removeTaskAndChildren(state.tasks, id)));
+      // Deleting cascades to all descendants server-side; reload to drop them
+      // from every visible date and refresh ancestor badges.
+      await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
       throw error;

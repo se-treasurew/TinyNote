@@ -3,7 +3,7 @@
   --window-opacity: 0.82;
   --app-font-size: 13px;
   --bg-rgb: 12 26 50;
-  --bg: rgb(var(--bg-rgb) / calc(var(--window-opacity) * 0.72));
+  --bg: rgb(var(--bg-rgb) / var(--window-opacity));
   --panel: rgba(255, 255, 255, 0.08);
   --panel-strong: rgba(18, 34, 61, 0.66);
   --text: #d9e6f7;
@@ -151,7 +151,7 @@ button {
   border-radius: 18px;
   clip-path: inset(0 round 18px);
   background:
-    linear-gradient(rgb(var(--bg-rgb) / 0.34), rgb(var(--bg-rgb) / 0.34)),
+    linear-gradient(rgb(var(--bg-rgb) / calc(var(--window-opacity) * 0.34)), rgb(var(--bg-rgb) / calc(var(--window-opacity) * 0.34))),
     var(--custom-background-image),
     var(--bg);
   background-position: center;
@@ -459,10 +459,35 @@ button {
 .task-item {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto 1fr auto auto;
   align-items: start;
   gap: 8px;
   padding: 5px 0;
+}
+
+.task-collapse {
+  width: 16px;
+  height: 18px;
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.task-collapse:hover {
+  color: var(--accent);
+}
+
+/* Placeholder keeps the checkbox column aligned for tasks without subtasks. */
+.task-collapse-placeholder {
+  width: 16px;
+  flex-shrink: 0;
 }
 
 .task-tree {
@@ -470,14 +495,34 @@ button {
   flex-direction: column;
 }
 
-/* Indent subtasks under their parent. The grid's 1fr title column absorbs the
-   left padding so the checkbox and menu stay aligned within the indented row. */
-.task-item--subtask {
+/* Indent each subtask level under its parent. The grid's 1fr title column
+   absorbs the left padding so the checkbox and menu stay aligned within the
+   indented row. depth 0 = top-level (no indent), 1 = child, 2 = grandchild. */
+.task-item--depth-1 {
   padding-left: 22px;
 }
 
-.subtask-add-input {
+.task-item--depth-2 {
+  padding-left: 44px;
+}
+
+.subtask-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px 26px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.subtask-add-row--depth-1 {
   margin-left: 22px;
+}
+
+.subtask-add-row--depth-2 {
+  margin-left: 44px;
+}
+
+.subtask-add-input {
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--line);
@@ -492,15 +537,53 @@ button {
   color: var(--muted);
 }
 
+.subtask-add-button {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.subtask-add-button.confirm {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+.subtask-add-button.cancel:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.subtask-add-button.confirm:hover {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
 .check-button {
+  display: inline-grid;
   width: 16px;
   height: 16px;
+  place-items: center;
   margin-top: 1px;
+  padding: 0;
   border-color: color-mix(in srgb, var(--text) 74%, transparent);
   border-radius: 50%;
   background: transparent;
   color: #061225;
+  line-height: 0;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.check-button svg {
+  display: block;
+  width: 11px;
+  height: 11px;
+  stroke-width: 3;
 }
 
 .check-button:hover {
@@ -536,9 +619,16 @@ button {
   display: none;
 }
 
+.task-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .task-title {
   display: block;
-  width: 100%;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   border: 0;
@@ -550,6 +640,20 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: text;
+}
+
+/* The x/y subtask badge sits at the right of the title row, distinct from the
+   type/postpone tags below. */
+.task-subtask-badge {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 .task-item.completed .task-title {
@@ -585,11 +689,6 @@ button {
   color: #c4b5fd;
 }
 
-.tag-subtask-count {
-  background: color-mix(in srgb, var(--text) 14%, transparent) !important;
-  color: var(--muted);
-}
-
 .task-detail-toggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -599,8 +698,9 @@ button {
   display: flex;
   align-items: center;
   gap: 5px;
-  flex: 1;
+  width: 96px;
   min-width: 0;
+  align-self: center;
 }
 
 .task-progress input[type='range'] {

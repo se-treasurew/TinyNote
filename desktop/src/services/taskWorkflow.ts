@@ -2,7 +2,7 @@ import type { Task, TaskOccurrence } from '../types/task';
 
 export interface TaskTreeNode<T extends TaskOccurrence = TaskOccurrence> {
   task: T;
-  subtasks: T[];
+  subtasks: TaskTreeNode<T>[];
 }
 
 export function applyComplete<T extends Task>(task: T, now: string): T {
@@ -71,7 +71,8 @@ export function getActiveCountByDate(tasks: Task[], date: string): number {
  * appears at most once. An occurrence is a child when it has a parentTaskId
  * pointing at another occurrence present in the same list; otherwise it is a
  * top-level node (covers parentTaskId === null and orphans whose parent is
- * missing/deleted/out-of-range). Both levels sort by (statusWeight, sortOrder,
+ * missing/deleted/out-of-range). Nesting is recursive up to three levels
+ * (parent → child → grandchild). Both levels sort by (statusWeight, sortOrder,
  * createdAt) to match groupDateDisplayTasksByDate.
  */
 export function groupTasksWithSubtasks<T extends TaskOccurrence>(occurrences: T[]): TaskTreeNode<T>[] {
@@ -94,17 +95,21 @@ export function groupTasksWithSubtasks<T extends TaskOccurrence>(occurrences: T[
     }
   }
 
-  topLevel.sort((a, b) => statusWeight(a) - statusWeight(b) || sortByOrder(a, b));
-
-  return topLevel.map((task) => {
-    const subtasks = (childrenByParent.get(task.id) ?? []).slice().sort(
+  const buildNode = (task: T): TaskTreeNode<T> => {
+    const childOccurrences = (childrenByParent.get(task.id) ?? []).slice().sort(
       (a, b) => statusWeight(a) - statusWeight(b) || sortByOrder(a, b),
     );
-    return { task, subtasks };
-  });
+    return { task, subtasks: childOccurrences.map(buildNode) };
+  };
+
+  topLevel.sort((a, b) => statusWeight(a) - statusWeight(b) || sortByOrder(a, b));
+  return topLevel.map(buildNode);
 }
 
-/** Subtask completion progress shown as an x/y badge on the parent row. */
+/**
+ * Subtask completion progress shown as an x/y badge on the parent row. Counts
+ * direct children only (grandchildren belong to their own parent's badge).
+ */
 export function subtaskBadge<T extends TaskOccurrence>(subtasks: T[]): { done: number; total: number } {
   const done = subtasks.filter(
     (subtask) => subtask.status === 'completed' || subtask.status === 'archived',

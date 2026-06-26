@@ -117,10 +117,10 @@ export function SettingsPanel() {
           />
         </label>
         <label>
-          <span>透明度</span>
+          <span>透明度 {Math.round(settings.opacity * 100)}%</span>
           <input
             type="range"
-            min="0.62"
+            min="0"
             max="1"
             step="0.02"
             value={settings.opacity}

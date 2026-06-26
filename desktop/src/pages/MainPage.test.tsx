@@ -124,6 +124,179 @@ describe('MainPage display layout', () => {
     expect(screen.queryByRole('button', { name: '清空已完成' })).not.toBeInTheDocument();
   });
 
+  it('collapses and expands a parent task subtree via the toggle', () => {
+    const parent = baseTask({ id: 'parent', title: '母任务' });
+    const child = baseTask({ id: 'child', title: '子任务', parentTaskId: 'parent', sortOrder: 1 });
+    useTaskStore.setState({
+      tasks: [parent, child],
+      tasksByDate: { '2026-06-16': [parent, child] },
+      selectedDate: '2026-06-16',
+    });
+
+    render(<MainPage />);
+
+    // Both parent and child are visible by default.
+    expect(screen.getByText('母任务')).toBeInTheDocument();
+    expect(screen.getByText('子任务')).toBeInTheDocument();
+
+    // Collapse the parent: the child disappears.
+    fireEvent.click(screen.getByLabelText('收起子任务'));
+    expect(screen.getByText('母任务')).toBeInTheDocument();
+    expect(screen.queryByText('子任务')).not.toBeInTheDocument();
+
+    // Expand again: the child reappears.
+    fireEvent.click(screen.getByLabelText('展开子任务'));
+    expect(screen.getByText('子任务')).toBeInTheDocument();
+  });
+
+  it('shows collapse toggles only on non-leaf tasks and progress bars only on leaf tasks', () => {
+    // Three-level tree: parent → child → grandchild. The grandchild is the only leaf.
+    const parent = baseTask({ id: 'parent', title: '母任务' });
+    const child = baseTask({ id: 'child', title: '子任务', parentTaskId: 'parent', sortOrder: 1 });
+    const grandchild = baseTask({
+      id: 'grandchild',
+      title: '孙任务',
+      parentTaskId: 'child',
+      sortOrder: 2,
+    });
+    useTaskStore.setState({
+      tasks: [parent, child, grandchild],
+      tasksByDate: { '2026-06-16': [parent, child, grandchild] },
+      selectedDate: '2026-06-16',
+    });
+
+    render(<MainPage />);
+
+    // Parent and child (non-leaf) each get a collapse toggle; grandchild (leaf) does not.
+    // Two non-leaf nodes (parent + child) → two collapse buttons.
+    expect(screen.getAllByLabelText('收起子任务')).toHaveLength(2);
+
+    // The parent and child rows carry the depth classes; the leaf grandchild is depth-2.
+    const parentRow = screen.getByText('母任务').closest('.task-item');
+    const childRow = screen.getByText('子任务').closest('.task-item');
+    const grandchildRow = screen.getByText('孙任务').closest('.task-item');
+    expect(parentRow).not.toHaveClass('task-item--depth-2');
+    expect(grandchildRow).toHaveClass('task-item--depth-2');
+
+    // Only the leaf (grandchild) shows a draggable progress slider.
+    expect(within(parentRow as HTMLElement).queryByRole('slider')).not.toBeInTheDocument();
+    expect(within(childRow as HTMLElement).queryByRole('slider')).not.toBeInTheDocument();
+    expect(within(grandchildRow as HTMLElement).getByRole('slider')).toBeInTheDocument();
+
+    // Non-leaf rows show the x/y badge; the leaf does not.
+    expect(within(parentRow as HTMLElement).getByText('0/1')).toBeInTheDocument();
+    expect(within(childRow as HTMLElement).getByText('0/1')).toBeInTheDocument();
+    expect(within(grandchildRow as HTMLElement).queryByText('0/1')).not.toBeInTheDocument();
+  });
+
+  it('shows confirm and cancel controls when adding a subtask and clears the draft on cancel', () => {
+    const parent = baseTask({ id: 'parent', title: '母任务' });
+    useTaskStore.setState({
+      tasks: [parent],
+      tasksByDate: { '2026-06-16': [parent] },
+      selectedDate: '2026-06-16',
+    });
+
+    render(<MainPage />);
+
+    fireEvent.contextMenu(screen.getByText('母任务').closest('.task-item') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: '添加子任务' }));
+    const subtaskInput = screen.getByLabelText('添加子任务');
+    fireEvent.change(subtaskInput, { target: { value: '临时子任务' } });
+
+    expect(screen.getByRole('button', { name: '确认添加子任务' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '取消添加子任务' }));
+
+    expect(screen.queryByLabelText('添加子任务')).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByText('母任务').closest('.task-item') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: '添加子任务' }));
+    expect(screen.getByLabelText('添加子任务')).toHaveValue('');
+  });
+
+  it('keeps Escape cancel behavior when adding a subtask', () => {
+    const parent = baseTask({ id: 'parent', title: '母任务' });
+    useTaskStore.setState({
+      tasks: [parent],
+      tasksByDate: { '2026-06-16': [parent] },
+      selectedDate: '2026-06-16',
+    });
+
+    render(<MainPage />);
+
+    fireEvent.contextMenu(screen.getByText('母任务').closest('.task-item') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: '添加子任务' }));
+    fireEvent.keyDown(screen.getByLabelText('添加子任务'), { key: 'Escape' });
+
+    expect(screen.queryByLabelText('添加子任务')).not.toBeInTheDocument();
+  });
+
+  it('cancels subtask adding when switching dates or collapsing the parent', async () => {
+    const parent = baseTask({ id: 'parent', title: '母任务' });
+    const child = baseTask({ id: 'child', title: '子任务', parentTaskId: 'parent', sortOrder: 1 });
+    const tomorrow = baseTask({
+      id: 'tomorrow',
+      title: '明天任务',
+      taskDate: '2026-06-17',
+      occurrenceDate: '2026-06-17',
+      definitionTaskDate: '2026-06-17',
+    });
+    useTaskStore.setState({
+      tasks: [parent, child, tomorrow],
+      tasksByDate: {
+        '2026-06-16': [parent, child],
+        '2026-06-17': [tomorrow],
+      },
+      selectedDate: '2026-06-16',
+    });
+
+    render(<MainPage />);
+
+    fireEvent.contextMenu(screen.getByText('母任务').closest('.task-item') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: '添加子任务' }));
+    expect(screen.getByLabelText('添加子任务')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '周三 06-17' }));
+    expect(screen.queryByLabelText('添加子任务')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '周二 06-16' }));
+    await waitFor(() => {
+      expect(screen.getByText('母任务')).toBeInTheDocument();
+    });
+    fireEvent.contextMenu(screen.getByText('母任务').closest('.task-item') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: '添加子任务' }));
+    expect(screen.getByLabelText('添加子任务')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('收起子任务'));
+    expect(screen.queryByLabelText('添加子任务')).not.toBeInTheDocument();
+  });
+
+  it('submits a subtask with the current selected date', async () => {
+    const addTask = vi.fn(async () => baseTask({ id: 'new-child', parentTaskId: 'parent', title: '新子任务' }));
+    const parent = baseTask({ id: 'parent', title: '母任务' });
+    useTaskStore.setState({
+      tasks: [parent],
+      tasksByDate: { '2026-06-16': [parent] },
+      selectedDate: '2026-06-16',
+      addTask,
+    });
+
+    render(<MainPage />);
+
+    fireEvent.contextMenu(screen.getByText('母任务').closest('.task-item') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: '添加子任务' }));
+    fireEvent.change(screen.getByLabelText('添加子任务'), { target: { value: '新子任务' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认添加子任务' }));
+
+    await waitFor(() => {
+      expect(addTask).toHaveBeenCalledWith({
+        title: '新子任务',
+        parentTaskId: 'parent',
+        taskDate: '2026-06-16',
+      });
+    });
+  });
+
   it('loads the next date window when the next arrow reaches the visible edge', async () => {
     const navigateDate = vi.fn(async () => undefined);
 

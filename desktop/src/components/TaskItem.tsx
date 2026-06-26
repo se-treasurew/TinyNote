@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarDays, Check, Info, MoreHorizontal, Plus, Save, Trash2, Undo2, X } from 'lucide-react';
+import { CalendarClock, CalendarDays, Check, ChevronDown, ChevronRight, Info, MoreHorizontal, Plus, Save, Trash2, Undo2, X } from 'lucide-react';
 import { useContext, useEffect, useRef, useState } from 'react';
 import type { TaskOccurrence, TaskSourceType } from '../types/task';
 import { useTaskStore } from '../stores/taskStore';
@@ -13,12 +13,24 @@ interface SubtaskBadge {
 
 interface TaskItemProps {
   task: TaskOccurrence;
-  isSubtask?: boolean;
+  /** 0 = top-level task, 1 = subtask, 2 = grandchild. */
+  depth?: number;
   subtaskBadge?: SubtaskBadge;
+  hasSubtasks?: boolean;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   onRequestAddSubtask?: () => void;
 }
 
-export function TaskItem({ task, isSubtask = false, subtaskBadge, onRequestAddSubtask }: TaskItemProps) {
+export function TaskItem({
+  task,
+  depth = 0,
+  subtaskBadge,
+  hasSubtasks = false,
+  isCollapsed = false,
+  onToggleCollapse,
+  onRequestAddSubtask,
+}: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -44,6 +56,8 @@ export function TaskItem({ task, isSubtask = false, subtaskBadge, onRequestAddSu
   const canSaveSchedule =
     Boolean(draftStartDate) &&
     (draftSourceType === 'manual' || Boolean(draftEndDate && draftEndDate >= draftStartDate));
+  const canAddSubtask = depth < 2;
+  const showProgress = task.status === 'active' && !hasSubtasks;
 
   useEffect(() => {
     resetDrafts();
@@ -141,11 +155,11 @@ export function TaskItem({ task, isSubtask = false, subtaskBadge, onRequestAddSu
 
   async function toggleCompleted() {
     if (isDone) {
-      await restoreTask(task.id);
+      await restoreTask(task.id, task.occurrenceDate);
       return;
     }
 
-    await completeTask(task.id);
+    await completeTask(task.id, task.occurrenceDate);
   }
 
   async function postpone() {
@@ -185,13 +199,25 @@ export function TaskItem({ task, isSubtask = false, subtaskBadge, onRequestAddSu
 
   return (
     <div
-      className={`task-item ${isSubtask ? 'task-item--subtask' : ''} ${isDone ? 'completed' : ''}`}
+      className={`task-item task-item--depth-${depth} ${isDone ? 'completed' : ''}`}
       role="listitem"
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu();
       }}
     >
+      {hasSubtasks ? (
+        <button
+          type="button"
+          className="task-collapse"
+          aria-label={isCollapsed ? '展开子任务' : '收起子任务'}
+          onClick={() => onToggleCollapse?.()}
+        >
+          {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        </button>
+      ) : (
+        <span className="task-collapse-placeholder" aria-hidden="true" />
+      )}
       <button
         type="button"
         className={`check-button ${isDone ? 'completed' : ''}`}
@@ -216,9 +242,14 @@ export function TaskItem({ task, isSubtask = false, subtaskBadge, onRequestAddSu
             }}
           />
         ) : (
-          <button type="button" className="task-title" onClick={() => setIsEditing(true)}>
-            {task.title}
-          </button>
+          <div className="task-title-row">
+            <button type="button" className="task-title" onClick={() => setIsEditing(true)}>
+              {task.title}
+            </button>
+            {subtaskBadge && subtaskBadge.total > 0 && (
+              <span className="task-subtask-badge">{subtaskBadge.done}/{subtaskBadge.total}</span>
+            )}
+          </div>
         )}
         <div className="task-meta">
           <div className="task-tags">
@@ -226,32 +257,29 @@ export function TaskItem({ task, isSubtask = false, subtaskBadge, onRequestAddSu
             {task.sourceType === 'daily' && <span className="tag-daily">每日</span>}
             {task.sourceType === 'multi_day' && <span className="tag-multi">多日</span>}
             {task.postponedAt && <span className="tag-postponed">延期</span>}
-            {subtaskBadge && subtaskBadge.total > 0 && (
-              <span className="tag-subtask-count">{subtaskBadge.done}/{subtaskBadge.total}</span>
-            )}
           </div>
-          {task.status === 'active' && (
-            <div className="task-progress">
-              <input
-                aria-label={`任务进度：${task.title}`}
-                type="range"
-                min="0"
-                max="100"
-                value={progress}
-                onChange={(event) => void saveProgress(Number(event.target.value))}
-              />
-              <span>{progress}%</span>
-            </div>
-          )}
         </div>
       </div>
+      {showProgress && (
+        <div className="task-progress">
+          <input
+            aria-label={`任务进度：${task.title}`}
+            type="range"
+            min="0"
+            max="100"
+            value={progress}
+            onChange={(event) => void saveProgress(Number(event.target.value))}
+          />
+          <span>{progress}%</span>
+        </div>
+      )}
       <div className="task-menu" ref={menuRef}>
         <button type="button" aria-label="更多" onClick={() => (isMenuOpen ? closeMenu() : openMenu())}>
           <MoreHorizontal size={16} />
         </button>
         {isMenuOpen && (
           <div className="task-menu-popover">
-            {!isSubtask && onRequestAddSubtask && (
+            {canAddSubtask && onRequestAddSubtask && (
               <button
                 type="button"
                 onClick={() => {
@@ -311,7 +339,7 @@ export function TaskItem({ task, isSubtask = false, subtaskBadge, onRequestAddSu
           draftStartDate={draftStartDate}
           draftEndDate={draftEndDate}
           canSaveSchedule={canSaveSchedule}
-          canEditSchedule={!isSubtask}
+          canEditSchedule={depth === 0}
           onClose={closeDetails}
           onSaveSchedule={() => void saveSchedule()}
           onChangeSourceType={updateDraftSourceType}

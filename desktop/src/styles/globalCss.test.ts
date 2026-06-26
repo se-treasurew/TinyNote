@@ -22,4 +22,9 @@ describe('global glass background CSS', () => {
     expect(css).toContain('background: transparent;');
     expect(css).toContain('clip-path: inset(0 round 18px)');
   });
+
+  it('centers the completed task check mark inside the circular button', () => {
+    expect(css).toMatch(/\.check-button\s*\{[^}]*display:\s*inline-grid;[^}]*place-items:\s*center;[^}]*padding:\s*0;[^}]*line-height:\s*0;/s);
+    expect(css).toMatch(/\.check-button svg\s*\{[^}]*display:\s*block;[^}]*width:\s*11px;[^}]*height:\s*11px;/s);
+  });
 });

@@ -125,9 +125,25 @@ describe('task workflow rules', () => {
     expect(trees).toHaveLength(2);
     expect(trees[0].task.id).toBe('parent');
     // Active subtasks sort above completed ones, matching the active-first rule.
-    expect(trees[0].subtasks.map((s) => s.id)).toEqual(['child-a', 'child-b']);
+    expect(trees[0].subtasks.map((s) => s.task.id)).toEqual(['child-a', 'child-b']);
     expect(trees[1].task.id).toBe('orphan');
     expect(trees[1].subtasks).toEqual([]);
+  });
+
+  it('groups subtasks recursively up to three levels (parent → child → grandchild)', () => {
+    const parent = occurrence({ id: 'parent', sortOrder: 0 });
+    const child = occurrence({ id: 'child', parentTaskId: 'parent', sortOrder: 0 });
+    const grandchild = occurrence({ id: 'grandchild', parentTaskId: 'child', sortOrder: 0 });
+    const orphanGrandchild = occurrence({ id: 'orphan-gc', parentTaskId: 'missing', sortOrder: 0 });
+
+    const trees = groupTasksWithSubtasks([parent, child, grandchild, orphanGrandchild]);
+
+    expect(trees.map((t) => t.task.id)).toEqual(['parent', 'orphan-gc']);
+    expect(trees[0].subtasks.map((s) => s.task.id)).toEqual(['child']);
+    // The grandchild nests under the child, not under the parent.
+    expect(trees[0].subtasks[0].subtasks.map((s) => s.task.id)).toEqual(['grandchild']);
+    // The parent's badge counts only direct children.
+    expect(subtaskBadge(trees[0].subtasks.map((s) => s.task))).toEqual({ done: 0, total: 1 });
   });
 
   it('sorts top-level tasks active-first then by sortOrder/createdAt', () => {

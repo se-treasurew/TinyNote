@@ -68,6 +68,83 @@ describe('TaskItem scheduling controls', () => {
     expect(screen.getByText('延期')).toBeInTheDocument();
   });
 
+  it('renders a collapse toggle only for tasks with subtasks and fires onToggleCollapse', () => {
+    const onToggleCollapse = vi.fn();
+    const { rerender } = render(
+      <TaskItem task={baseTask()} hasSubtasks subtaskBadge={{ done: 0, total: 1 }} onToggleCollapse={onToggleCollapse} />,
+    );
+
+    const collapseButton = screen.getByLabelText('收起子任务');
+    fireEvent.click(collapseButton);
+    expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+
+    // Collapsed state flips the label and icon.
+    rerender(
+      <TaskItem
+        task={baseTask()}
+        hasSubtasks
+        isCollapsed
+        subtaskBadge={{ done: 0, total: 1 }}
+        onToggleCollapse={onToggleCollapse}
+      />,
+    );
+    expect(screen.getByLabelText('展开子任务')).toBeInTheDocument();
+  });
+
+  it('does not render a collapse toggle for tasks without subtasks', () => {
+    render(<TaskItem task={baseTask()} />);
+    expect(screen.queryByLabelText('收起子任务')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('展开子任务')).not.toBeInTheDocument();
+  });
+
+  it('passes the occurrence date when completing or restoring a row', async () => {
+    const completeTask = vi.fn(async () => undefined);
+    const restoreTask = vi.fn(async () => undefined);
+    useTaskStore.setState({ completeTask, restoreTask });
+    const { rerender } = render(
+      <TaskItem task={baseTask({
+        taskDate: '2026-06-26',
+        definitionTaskDate: '2026-06-26',
+        occurrenceDate: '2026-06-27',
+      })} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '完成任务：写方案' }));
+
+    await waitFor(() => {
+      expect(completeTask).toHaveBeenCalledWith('task-1', '2026-06-27');
+    });
+
+    rerender(
+      <TaskItem task={baseTask({
+        taskDate: '2026-06-26',
+        definitionTaskDate: '2026-06-26',
+        occurrenceDate: '2026-06-27',
+        status: 'completed',
+      })} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '恢复任务：写方案' }));
+
+    await waitFor(() => {
+      expect(restoreTask).toHaveBeenCalledWith('task-1', '2026-06-27');
+    });
+  });
+
+  it('shows the subtask x/y badge on the title row only for tasks with subtasks', () => {
+    const { rerender } = render(
+      <TaskItem task={baseTask({ title: '母任务' })} hasSubtasks subtaskBadge={{ done: 1, total: 3 }} />,
+    );
+
+    const badge = screen.getByText('1/3');
+    expect(badge).toHaveClass('task-subtask-badge');
+    // The badge shares the title row, not the meta tag row.
+    expect(badge.closest('.task-title-row')).toBeInTheDocument();
+
+    // A leaf task without subtasks shows no badge.
+    rerender(<TaskItem task={baseTask({ title: '叶子任务' })} />);
+    expect(screen.queryByText('1/3')).not.toBeInTheDocument();
+  });
+
   it('opens a compact right-click menu and postpones to the chosen date', async () => {
     const postponeTask = vi.fn(async () => undefined);
     useTaskStore.setState({ postponeTask });
