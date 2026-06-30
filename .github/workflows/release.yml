@@ -43,11 +43,13 @@ jobs:
         shell: pwsh
         run: |
           $body = node .github/scripts/extract-release-notes.mjs
+          $body | Set-Content -Path release-notes.md -Encoding utf8
           "body<<TINyNoteReleaseNotes" >> $env:GITHUB_OUTPUT
           $body >> $env:GITHUB_OUTPUT
           "TINyNoteReleaseNotes" >> $env:GITHUB_OUTPUT
 
       - uses: tauri-apps/tauri-action@v0.6.2
+        id: tauri_build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -63,3 +65,10 @@ jobs:
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
           uploadUpdaterSignatures: true
+
+      - name: Sync release notes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: v${{ steps.tauri_build.outputs.appVersion }}
+        run: gh release edit $env:RELEASE_TAG --notes-file release-notes.md

@@ -123,8 +123,14 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 
 当前版本 **1.2.1**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
 
+## 应用图标
+
+规范源图为 `desktop/src-tauri/icons/icon-source.png`，必须保持正方形。Windows 使用的 `32x32.png`、`128x128.png`、`128x128@2x.png` 和 `icon.ico` 均由 `npm.cmd run tauri -- icon src-tauri/icons/icon-source.png` 生成；不要单独手工修改某一个尺寸。`TrayIconBuilder` 使用 `app.default_window_icon()`，因此同一套资源会同时影响窗口、托盘、EXE 和安装器。
+
 ## 发布
 
-发布流程由 `.github/workflows/release.yml` 驱动：推送 `v*` tag（或手动 dispatch）后在 `windows-latest` 上跑 `typecheck` + `test`，再用 `tauri-apps/tauri-action@v0.6.2` 构建、签名并发布 GitHub Release。Release body 由 `.github/scripts/extract-release-notes.mjs` 从 `CHANGELOG.md` 提取，updater `latest.json` 指向 `se-treasurew/TinyNote` 的 latest release（见 `tauri.conf.json` 的 updater endpoints）。签名密钥 `TAURI_SIGNING_PRIVATE_KEY` / 密码为仓库 secret，本地需自行配置才能产出带 `.sig` 的 updater 制品。升级器公钥已内嵌在 `tauri.conf.json` 的 `plugins.updater.pubkey`。
+发布流程由 `.github/workflows/release.yml` 驱动：推送 `v*` tag（或手动 dispatch）后在 `windows-latest` 上跑 `typecheck` + `test`，再用 `tauri-apps/tauri-action@v0.6.2` 构建、签名并发布 GitHub Release。Release body 由 `.github/scripts/extract-release-notes.mjs` 从 `CHANGELOG.md` 提取；工作流在构建后通过 `gh release edit` 再次同步正文，确保重跑既有 tag 时说明也会更新。updater `latest.json` 指向 `se-treasurew/TinyNote` 的 latest release（见 `tauri.conf.json` 的 updater endpoints）。签名密钥 `TAURI_SIGNING_PRIVATE_KEY` / 密码为仓库 secret，本地需自行配置才能产出带 `.sig` 的 updater 制品。升级器公钥已内嵌在 `tauri.conf.json` 的 `plugins.updater.pubkey`。
+
+Tauri updater 默认只接受 `update.version > current`。强制覆盖同版本 Release 只会替换新下载用户获得的安装包，已经安装该版本的用户不会自动更新；正常发布应递增版本号。
 
 **不支持降级安装**。SQLite 迁移只增不删，且 sqlx 在启动时校验数据库里已应用的 migration 必须全部存在于当前 binary 的迁移列表中（`ignore_missing` 默认 false）。因此从高版本降级到低版本会启动失败：高版本已写入的 migration（如 v1.0.2 的 migration 7）低版本 binary 不认识，sqlx 抛 `VersionMissing` 致 SQL 插件初始化失败；同时 Tauri NSIS 安装器默认也拒绝覆盖更高版本。全新安装和低→高升级均正常，仅高→低降级不受支持。若未来确需允许降级，需在 Rust 侧为 SQL 插件设置 `ignore_missing = true` 并重新发布。

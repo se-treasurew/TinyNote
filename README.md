@@ -1,5 +1,9 @@
 # TinyNote 小笺
 
+<p align="center">
+  <img src="desktop/src-tauri/icons/128x128.png" alt="TinyNote 应用图标" width="96">
+</p>
+
 TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + React + TypeScript + SQLite 构建。界面简洁，毛玻璃主题，本地离线可用。当前版本 **v1.2.1**。
 
 ## 功能
@@ -21,6 +25,8 @@ TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + Rea
 在 [GitHub Releases](https://github.com/se-treasurew/TinyNote/releases) 下载最新的 `TinyNote_*_x64-setup.exe` 并运行。应用内点击标题栏“小笺”可打开关于面板并检查更新。
 
 > ⚠️ **不支持降级安装**：升级到新版本后，请勿安装更旧的安装包。TinyNote 的数据库迁移只增不删，降级会导致应用无法启动。如必须运行旧版本，需先卸载当前版本并删除本地数据库（会丢失全部本地数据）后全新安装。
+
+> v1.2.1 的应用图标曾进行同版本更新。已经安装 v1.2.1 的用户如需新图标，请从 Releases 重新下载安装包。
 
 更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
