@@ -71,4 +71,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: v${{ steps.tauri_build.outputs.appVersion }}
-        run: gh release edit $env:RELEASE_TAG --notes-file release-notes.md
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: gh release edit $env:RELEASE_TAG --notes-file release-notes.md --target $env:RELEASE_COMMIT

@@ -16,6 +16,8 @@ describe('GitHub release workflow', () => {
     expect(workflow).toContain('id: tauri_build');
     expect(workflow).toContain('release-notes.md');
     expect(workflow).toContain('gh release edit');
+    expect(workflow).toContain('--target $env:RELEASE_COMMIT');
+    expect(workflow).toContain('RELEASE_COMMIT: ${{ github.sha }}');
     expect(workflow).toContain('steps.tauri_build.outputs.appVersion');
     expect(workflow).toContain('TAURI_SIGNING_PRIVATE_KEY');
     expect(workflow).toContain("tags:");
