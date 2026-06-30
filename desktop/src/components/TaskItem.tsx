@@ -2,7 +2,7 @@ import { CalendarClock, CalendarDays, Check, ChevronDown, ChevronRight, Info, Mo
 import { useContext, useEffect, useRef, useState } from 'react';
 import type { TaskOccurrence, TaskSourceType } from '../types/task';
 import { useTaskStore } from '../stores/taskStore';
-import { addDays } from '../utils/date';
+import { addDays, formatShortDate } from '../utils/date';
 import { isPostponeEligibleTask } from '../services/taskScheduling';
 import { ConfirmContext } from './ConfirmDialog';
 
@@ -40,6 +40,8 @@ export function TaskItem({
   const [draftEndDate, setDraftEndDate] = useState(task.endDate ?? addDays(task.definitionTaskDate, 1));
   const [postponeToDate, setPostponeToDate] = useState(addDays(task.occurrenceDate, 1));
   const [progress, setProgress] = useState(task.progressPercent);
+  const progressRef = useRef(task.progressPercent);
+  const isProgressDirtyRef = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const confirm = useContext(ConfirmContext);
   const completeTask = useTaskStore((state) => state.completeTask);
@@ -62,6 +64,8 @@ export function TaskItem({
   useEffect(() => {
     resetDrafts();
     setProgress(task.progressPercent);
+    progressRef.current = task.progressPercent;
+    isProgressDirtyRef.current = false;
   }, [task.definitionTaskDate, task.endDate, task.id, task.occurrenceDate, task.progressPercent, task.sourceType, task.title]);
 
   useEffect(() => {
@@ -148,8 +152,24 @@ export function TaskItem({
     }
   }
 
-  async function saveProgress(nextProgress: number) {
+  function changeProgress(nextProgress: number) {
     setProgress(nextProgress);
+    progressRef.current = nextProgress;
+    isProgressDirtyRef.current = true;
+  }
+
+  async function commitProgress() {
+    if (!isProgressDirtyRef.current) {
+      return;
+    }
+
+    const nextProgress = progressRef.current;
+    isProgressDirtyRef.current = false;
+    if (nextProgress === 100) {
+      await completeTask(task.id, task.occurrenceDate);
+      return;
+    }
+
     await updateTaskProgress(task.id, task.occurrenceDate, nextProgress);
   }
 
@@ -255,7 +275,11 @@ export function TaskItem({
           <div className="task-tags">
             {task.sourceType === 'manual' && <span className="tag-manual">普通</span>}
             {task.sourceType === 'daily' && <span className="tag-daily">每日</span>}
-            {task.sourceType === 'multi_day' && <span className="tag-multi">多日</span>}
+            {task.sourceType === 'multi_day' && (
+              <span className="tag-multi">
+                {task.endDate ? `截止 ${formatShortDate(task.endDate)}` : '截止未设置'}
+              </span>
+            )}
             {task.postponedAt && <span className="tag-postponed">延期</span>}
           </div>
         </div>
@@ -268,7 +292,11 @@ export function TaskItem({
             min="0"
             max="100"
             value={progress}
-            onChange={(event) => void saveProgress(Number(event.target.value))}
+            onChange={(event) => changeProgress(Number(event.target.value))}
+            onPointerUp={() => void commitProgress()}
+            onPointerCancel={() => void commitProgress()}
+            onKeyUp={() => void commitProgress()}
+            onBlur={() => void commitProgress()}
           />
           <span>{progress}%</span>
         </div>

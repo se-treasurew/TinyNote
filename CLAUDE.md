@@ -95,6 +95,7 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 - **创建**：`taskService.addTask` 用 `depthOf` 计算候选父任务深度，深度 ≥ 2 时拒绝（孙不能再加子）。子任务继承父的 `sourceType/taskDate/endDate`。`CreateTaskInput.parentTaskId` 仅创建时设，`UpdateTaskInput` 不含。
 - **分组**：`taskWorkflow.groupTasksWithSubtasks` 把单日扁平 occurrence 列表递归构建为 `TaskTreeNode[]`（`subtasks` 是递归节点数组）。孤儿子任务（父缺失/越界）升为顶层。
 - **徽标**：`subtaskBadge` 只数**直接**子任务（孙不计入母的徽标）。含子任务的任务在标题行右侧显示 `x/y` 徽标，不显示进度条；只有叶子任务（无子任务）显示可拖动进度条。
+- **进度提交**：`TaskItem` 拖动进度时只更新本地显示，在 pointer/key 结束或失焦时一次性提交；达到 100% 必须调用 `completeTask(id, occurrenceDate)`，不要先写 active progress entry。
 - **完成推进**：`completeTask`/`restoreTask` 末尾调 `recomputeAncestorProgress` 沿祖先链上溯——按直接子任务完成比例重算每个祖先的进度。daily/multi_day 祖先写当日 progress entry 的 `percent`（全完成置 `completed`）；manual 祖先全完成时自动 `applyComplete`、否则 `applyRestore`。manual 子任务看 `task.status`，daily/multi_day 子任务看当日 entry status。
 - **折叠**：`MainPage` 用 `collapsedParentIds: Set<string>`（会话内、非持久化）控制每节点子树显示；`TaskItem` 有子任务时在复选框前显示 `▶/▼` 折叠按钮。
 - **添加交互**：子任务添加行有确认/取消图标按钮，Enter 提交、Escape 取消；切换日期、折叠父任务或打开底部快速添加时会退出子任务添加态。
@@ -120,7 +121,7 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 
 ## 版本
 
-当前版本 **1.2.0**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
+当前版本 **1.2.1**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
 
 ## 发布
 

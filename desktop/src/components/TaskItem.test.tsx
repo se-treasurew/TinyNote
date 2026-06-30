@@ -145,6 +145,85 @@ describe('TaskItem scheduling controls', () => {
     expect(screen.queryByText('1/3')).not.toBeInTheDocument();
   });
 
+  it('saves a non-complete progress value only after the pointer is released', async () => {
+    const updateTaskProgress = vi.fn(async () => undefined);
+    useTaskStore.setState({ updateTaskProgress });
+    render(<TaskItem task={baseTask({ progressPercent: 20 })} />);
+
+    const slider = screen.getByRole('slider', { name: '任务进度：写方案' });
+    fireEvent.change(slider, { target: { value: '65' } });
+
+    expect(screen.getByText('65%')).toBeInTheDocument();
+    expect(updateTaskProgress).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(slider);
+
+    await waitFor(() => {
+      expect(updateTaskProgress).toHaveBeenCalledWith('task-1', '2026-06-18', 65);
+    });
+  });
+
+  it('completes the current occurrence at 100 percent without saving active progress', async () => {
+    const completeTask = vi.fn(async () => undefined);
+    const updateTaskProgress = vi.fn(async () => undefined);
+    useTaskStore.setState({ completeTask, updateTaskProgress });
+    render(<TaskItem task={baseTask({
+      occurrenceDate: '2026-06-20',
+      progressPercent: 40,
+    })} />);
+
+    const slider = screen.getByRole('slider', { name: '任务进度：写方案' });
+    fireEvent.change(slider, { target: { value: '100' } });
+    fireEvent.pointerUp(slider);
+
+    await waitFor(() => {
+      expect(completeTask).toHaveBeenCalledWith('task-1', '2026-06-20');
+    });
+    expect(updateTaskProgress).not.toHaveBeenCalled();
+  });
+
+  it('completes at 100 percent after keyboard progress input', async () => {
+    const completeTask = vi.fn(async () => undefined);
+    useTaskStore.setState({ completeTask });
+    render(<TaskItem task={baseTask({ progressPercent: 90 })} />);
+
+    const slider = screen.getByRole('slider', { name: '任务进度：写方案' });
+    fireEvent.change(slider, { target: { value: '100' } });
+    fireEvent.keyUp(slider, { key: 'End' });
+
+    await waitFor(() => {
+      expect(completeTask).toHaveBeenCalledWith('task-1', '2026-06-18');
+    });
+  });
+
+  it('does not submit progress twice when pointer release is followed by blur', async () => {
+    const updateTaskProgress = vi.fn(async () => undefined);
+    useTaskStore.setState({ updateTaskProgress });
+    render(<TaskItem task={baseTask({ progressPercent: 10 })} />);
+
+    const slider = screen.getByRole('slider', { name: '任务进度：写方案' });
+    fireEvent.change(slider, { target: { value: '55' } });
+    fireEvent.pointerUp(slider);
+    fireEvent.blur(slider);
+
+    await waitFor(() => {
+      expect(updateTaskProgress).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('shows the deadline in the multi-day task tag', () => {
+    const { rerender } = render(<TaskItem task={baseTask({
+      sourceType: 'multi_day',
+      endDate: '2026-06-30',
+    })} />);
+
+    expect(screen.getByText('截止 6月30日')).toHaveClass('tag-multi');
+    expect(screen.queryByText('多日')).not.toBeInTheDocument();
+
+    rerender(<TaskItem task={baseTask({ sourceType: 'multi_day', endDate: null })} />);
+    expect(screen.getByText('截止未设置')).toHaveClass('tag-multi');
+  });
+
   it('opens a compact right-click menu and postpones to the chosen date', async () => {
     const postponeTask = vi.fn(async () => undefined);
     useTaskStore.setState({ postponeTask });
