@@ -29,8 +29,20 @@ export class TaskRepository {
        FROM tasks
        WHERE status != 'deleted'
          AND (
-           -- Manual tasks only show on their own date, so bound both sides.
-           (source_type = 'manual' AND task_date >= $1 AND task_date <= $2)
+            -- Manual tasks show on their own date and on any active
+            -- postponement target date. The target may be visible after the
+            -- definition date has scrolled out of the current window.
+            (source_type = 'manual' AND (
+              (task_date >= $1 AND task_date <= $2)
+              OR EXISTS (
+                SELECT 1
+                FROM task_postponements
+                WHERE task_postponements.task_id = tasks.id
+                  AND task_postponements.deleted_at IS NULL
+                  AND task_postponements.to_date >= $1
+                  AND task_postponements.to_date <= $2
+              )
+            ))
            -- Daily/multi-day tasks span a range. Daily tasks with no end_date
            -- stay active indefinitely by design, so they remain unbounded on
            -- the lower side; multi-day tasks are bounded by end_date >= $1.
@@ -245,6 +257,21 @@ export class TaskRepository {
       [taskId, progressDate],
     );
     return rows[0] ? mapTaskProgressEntryRow(rows[0]) : null;
+  }
+
+  async findActivePostponement(taskId: string, fromDate: string, toDate: string): Promise<TaskPostponement | null> {
+    const rows = await selectWithRetry<TaskPostponementRow[]>(
+      `SELECT ${taskPostponementColumns}
+       FROM task_postponements
+       WHERE task_id = $1
+         AND from_date = $2
+         AND to_date = $3
+         AND deleted_at IS NULL
+       ORDER BY created_at ASC, id ASC
+       LIMIT 1`,
+      [taskId, fromDate, toDate],
+    );
+    return rows[0] ? mapTaskPostponementRow(rows[0]) : null;
   }
 
   async upsertProgressEntry(entry: TaskProgressEntry): Promise<void> {

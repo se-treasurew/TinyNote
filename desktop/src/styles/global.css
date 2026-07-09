@@ -591,6 +591,14 @@ button {
   background: rgba(49, 228, 173, 0.12);
 }
 
+.check-button:disabled,
+.check-button:disabled:hover {
+  cursor: not-allowed;
+  border-color: color-mix(in srgb, var(--text) 28%, transparent);
+  background: transparent;
+  opacity: 0.48;
+}
+
 .check-button.completed {
   border-color: var(--accent);
   background: var(--accent);

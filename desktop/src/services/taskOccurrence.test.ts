@@ -183,6 +183,43 @@ describe('task occurrences', () => {
     ]);
   });
 
+  it('keeps a completed multi-day task completed on every later occurrence', () => {
+    const task = baseTask({
+      sourceType: 'multi_day',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-18',
+      status: 'completed',
+      completedAt: '2026-06-16T02:00:00.000Z',
+    });
+
+    const occurrences = buildTaskOccurrences({
+      tasks: [task],
+      progressEntries: [progressEntry({ progressDate: '2026-06-16', percent: 55, status: 'active' })],
+      postponements: [],
+      visibleDates: ['2026-06-16', '2026-06-17', '2026-06-18'],
+    });
+
+    expect(occurrences.map((item) => item.status)).toEqual(['completed', 'completed', 'completed']);
+  });
+
+  it('keeps a completed manual definition occurrence completed despite a stale active progress entry', () => {
+    const task = baseTask({
+      sourceType: 'manual',
+      taskDate: '2026-06-16',
+      status: 'completed',
+      completedAt: '2026-06-16T02:00:00.000Z',
+    });
+
+    const occurrences = buildTaskOccurrences({
+      tasks: [task],
+      progressEntries: [progressEntry({ progressDate: '2026-06-16', percent: 100, status: 'active' })],
+      postponements: [],
+      visibleDates: ['2026-06-16'],
+    });
+
+    expect(occurrences[0]).toMatchObject({ status: 'completed', progressPercent: 100 });
+  });
+
   it('clamps progress to the supported percentage range', () => {
     expect(clampProgressPercent(-10)).toBe(0);
     expect(clampProgressPercent(45.8)).toBe(46);

@@ -74,4 +74,23 @@ describe('Tauri SQL migrations', () => {
 
     expect(migration).toContain('CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id)');
   });
+
+  it('repairs globally completed multi-day tasks from their latest completed occurrence in migration 8', () => {
+    const libRs = readFileSync(resolve(process.cwd(), 'src-tauri/src/lib.rs'), 'utf8');
+    const migration = migrationSql(libRs, 8);
+
+    expect(migration).toContain("source_type = 'multi_day'");
+    expect(migration).toContain("status = 'completed'");
+    expect(migration).toContain('task_progress_entries');
+    expect(migration).toContain('NOT EXISTS');
+  });
+
+  it('deduplicates active postponements and prevents identical active records in migration 9', () => {
+    const libRs = readFileSync(resolve(process.cwd(), 'src-tauri/src/lib.rs'), 'utf8');
+    const migration = migrationSql(libRs, 9);
+
+    expect(migration).toContain('UPDATE task_postponements');
+    expect(migration).toContain('deleted_at IS NULL');
+    expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_task_postponements_active_unique');
+  });
 });

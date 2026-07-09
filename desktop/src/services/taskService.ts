@@ -189,39 +189,51 @@ export class TaskService {
       throw new Error('Postpone target date must be after source date');
     }
 
-    const parentOccurrence = await this.postponeSingle(task, fromDate, toDate, sourceProgressPercent);
-
-    // Cascade to active descendants that are also eligible on fromDate.
-    // Children inherit the parent's range, so manual children are always
-    // eligible and multi_day children are eligible iff the parent is.
-    // postponeSingle does not itself look up children, so there is no double
-    // cascade. Already-completed descendants are skipped by the eligibility
-    // check (status must be active).
-    const descendants = await this.collectDescendants(id);
-    for (const descendant of descendants) {
-      if (isPostponeEligibleTask(descendant, fromDate)) {
-        await this.postponeSingle(descendant, fromDate, toDate, undefined);
+    const closure = await this.collectPostponementClosure(task, fromDate);
+    let requestedOccurrence: TaskOccurrence | null = null;
+    for (const candidate of closure) {
+      const occurrence = await this.postponeSingle(
+        candidate,
+        fromDate,
+        toDate,
+        candidate.id === task.id ? sourceProgressPercent : undefined,
+      );
+      if (candidate.id === task.id) {
+        requestedOccurrence = occurrence;
       }
     }
 
-    // Cascade up to ancestors: postponing a subtask should also postpone its
-    // parent (and grandparents) so the whole branch moves together. Each
-    // ancestor is postponed on its own (via postponeSingle, no recursion) to
-    // avoid re-delaying the start node's descendants a second time. Siblings of
-    // the start node are deliberately left untouched.
-    let ancestorId = task.parentTaskId;
-    while (ancestorId) {
-      const ancestor = await taskRepository.findById(ancestorId);
-      if (!ancestor) {
-        break;
-      }
-      if (isPostponeEligibleTask(ancestor, fromDate)) {
-        await this.postponeSingle(ancestor, fromDate, toDate, undefined);
-      }
-      ancestorId = ancestor.parentTaskId;
+    if (!requestedOccurrence) {
+      throw new Error('Task cannot be postponed');
+    }
+    return requestedOccurrence;
+  }
+
+  async postponeTasksForDate(
+    occurrences: Array<Pick<TaskOccurrence, 'id' | 'progressPercent'>>,
+    fromDate: string,
+    toDate: string,
+  ): Promise<void> {
+    if (toDate <= fromDate) {
+      throw new Error('Postpone target date must be after source date');
     }
 
-    return parentOccurrence;
+    const sourceProgressById = new Map(occurrences.map((occurrence) => [occurrence.id, occurrence.progressPercent]));
+    const tasksById = new Map<string, Task>();
+    for (const occurrence of occurrences) {
+      const task = await this.requireTask(occurrence.id);
+      if (!isPostponeEligibleTask(task, fromDate)) {
+        continue;
+      }
+
+      for (const candidate of await this.collectPostponementClosure(task, fromDate)) {
+        tasksById.set(candidate.id, candidate);
+      }
+    }
+
+    for (const task of tasksById.values()) {
+      await this.postponeSingle(task, fromDate, toDate, sourceProgressById.get(task.id));
+    }
   }
 
   private async postponeSingle(
@@ -230,6 +242,12 @@ export class TaskService {
     toDate: string,
     sourceProgressPercent?: number,
   ): Promise<TaskOccurrence> {
+    const existingPostponement = await taskRepository.findActivePostponement(task.id, fromDate, toDate);
+    if (existingPostponement) {
+      const targetEntry = await taskRepository.findProgressEntry(task.id, toDate);
+      return this.taskToOccurrenceWithHistory(task, toDate, targetEntry ? [targetEntry] : []);
+    }
+
     const currentEntry = await this.resolveProgressForPostponement(task, fromDate);
     if (currentEntry && currentEntry.status !== 'active') {
       throw new Error('Task cannot be postponed');
@@ -304,6 +322,7 @@ export class TaskService {
   async completeTask(id: string, occurrenceDate?: string): Promise<TaskOccurrence> {
     const task = await this.requireTask(id);
     const effectiveDate = occurrenceDate ?? task.taskDate;
+    await this.assertDirectChildrenCompleted(task, effectiveDate);
     const occurrence = await this.saveTaskStatusForOccurrence(task, effectiveDate, 'completed');
 
     // Completing a subtask advances its parent's progress by the ratio of
@@ -401,6 +420,39 @@ export class TaskService {
     return descendants;
   }
 
+  /**
+   * Gather the starting task, eligible descendants, and eligible ancestors once.
+   * Both single and batch postponement use this closure so parent-child trees do
+   * not generate duplicate history rows when the same date contains every node.
+   */
+  private async collectPostponementClosure(task: Task, fromDate: string): Promise<Task[]> {
+    const tasksById = new Map<string, Task>();
+    const addIfEligible = (candidate: Task) => {
+      if (isPostponeEligibleTask(candidate, fromDate)) {
+        tasksById.set(candidate.id, candidate);
+      }
+    };
+
+    addIfEligible(task);
+    for (const descendant of await this.collectDescendants(task.id)) {
+      addIfEligible(descendant);
+    }
+
+    let ancestorId = task.parentTaskId;
+    const visitedAncestors = new Set<string>([task.id]);
+    while (ancestorId && !visitedAncestors.has(ancestorId)) {
+      visitedAncestors.add(ancestorId);
+      const ancestor = await taskRepository.findById(ancestorId);
+      if (!ancestor) {
+        break;
+      }
+      addIfEligible(ancestor);
+      ancestorId = ancestor.parentTaskId;
+    }
+
+    return Array.from(tasksById.values());
+  }
+
   private async updateOccurrenceStatus(
     task: Task,
     progressDate: string,
@@ -427,6 +479,10 @@ export class TaskService {
     occurrenceDate: string,
     status: 'completed' | 'active',
   ): Promise<TaskOccurrence> {
+    if (task.sourceType === 'multi_day') {
+      return this.saveDefinitionStatus(task, occurrenceDate, status);
+    }
+
     if (task.sourceType !== 'manual') {
       return this.updateOccurrenceStatus(task, occurrenceDate, status);
     }
@@ -440,11 +496,11 @@ export class TaskService {
       return this.updateOccurrenceStatus(task, occurrenceDate, status);
     }
 
-    return this.saveManualStatus(task, occurrenceDate, status);
+    return this.saveDefinitionStatus(task, occurrenceDate, status);
   }
 
-  /** Save a manual task's own status (active/completed/...) and return its occurrence. */
-  private async saveManualStatus(
+  /** Save a task definition's global active/completed status and return one occurrence. */
+  private async saveDefinitionStatus(
     task: Task,
     occurrenceDate: string,
     status: 'completed' | 'active',
@@ -460,10 +516,9 @@ export class TaskService {
    * Recompute progress up the ancestor chain after a child's completion state
    * changes. For each ancestor with direct children: the progress percent is
    * the ratio of completed direct children (manual child → its task.status;
-   * daily/multi_day child → that date's progress entry status). A daily/
-   * multi_day ancestor writes that ratio as a per-date progress entry; a
-   * manual ancestor is auto-completed when all direct children are completed
-   * (and restored to active otherwise).
+   * daily child → that date's progress entry status). A multi-day ancestor is
+   * completed globally when all direct children are complete; daily and
+   * postponed manual ancestors keep their per-date progress records.
    */
   private async recomputeAncestorProgress(ancestorId: string, occurrenceDate: string): Promise<void> {
     let currentId: string | null = ancestorId;
@@ -478,35 +533,40 @@ export class TaskService {
         break;
       }
 
-      // A child is "done" on this date if it has a completed progress entry
-      // for this occurrence, otherwise manual children fall back to their
-      // definition status.
+      // listProgressEntries returns history through occurrenceDate. Only a
+      // direct record for this occurrence is relevant to daily completion.
       const childEntries = await taskRepository.listProgressEntries(
         children.map((child) => child.id),
         occurrenceDate,
       );
-      const entryByChild = new Map(childEntries.map((entry) => [entry.taskId, entry]));
-      const doneCount = children.filter((child) => {
-        const entry = entryByChild.get(child.id);
-        if (entry) {
-          return entry.status === 'completed' || entry.status === 'archived';
-        }
-        if (child.sourceType === 'manual') {
-          return child.status === 'completed' || child.status === 'archived';
-        }
-        return false;
-      }).length;
+      const entryByChild = new Map(
+        childEntries
+          .filter((entry) => entry.progressDate === occurrenceDate)
+          .map((entry) => [entry.taskId, entry]),
+      );
+      const doneCount = children.filter((child) => this.isTaskCompletedOnDate(child, entryByChild.get(child.id))).length;
       const total = children.length;
       const percent = clampProgressPercent(Math.round((doneCount / total) * 100));
       const allDone = doneCount === total;
 
-      if (ancestor.sourceType === 'manual' && occurrenceDate === ancestor.taskDate) {
+      if (ancestor.sourceType === 'multi_day') {
+        if (allDone) {
+          if (ancestor.status !== 'completed') {
+            await this.saveDefinitionStatus(ancestor, occurrenceDate, 'completed');
+          }
+        } else {
+          if (ancestor.status !== 'active') {
+            await this.saveDefinitionStatus(ancestor, occurrenceDate, 'active');
+          }
+          await this.writeProgressPercent(ancestor, occurrenceDate, percent, false);
+        }
+      } else if (ancestor.sourceType === 'manual' && occurrenceDate === ancestor.taskDate) {
         const targetStatus = allDone ? 'completed' : 'active';
         const ancestorEntry = await taskRepository.findProgressEntry(ancestor.id, occurrenceDate);
         if (ancestorEntry) {
           await this.writeProgressPercent(ancestor, occurrenceDate, percent, allDone);
         } else if ((ancestor.status === 'completed') !== (targetStatus === 'completed')) {
-          await this.saveManualStatus(ancestor, occurrenceDate, targetStatus);
+          await this.saveDefinitionStatus(ancestor, occurrenceDate, targetStatus);
         }
       } else {
         await this.writeProgressPercent(ancestor, occurrenceDate, percent, allDone);
@@ -514,6 +574,50 @@ export class TaskService {
 
       currentId = ancestor.parentTaskId;
     }
+  }
+
+  private async assertDirectChildrenCompleted(task: Task, occurrenceDate: string): Promise<void> {
+    const children = await taskRepository.listByParentId(task.id);
+    if (children.length === 0) {
+      return;
+    }
+
+    const entries = await taskRepository.listProgressEntries(
+      children.map((child) => child.id),
+      occurrenceDate,
+    );
+    const directEntryByChild = new Map(
+      entries
+        .filter((entry) => entry.progressDate === occurrenceDate)
+        .map((entry) => [entry.taskId, entry]),
+    );
+    const hasUnfinishedChild = children.some(
+      (child) => !this.isTaskCompletedOnDate(child, directEntryByChild.get(child.id)),
+    );
+
+    if (hasUnfinishedChild) {
+      throw new Error('Cannot complete task with unfinished subtasks');
+    }
+  }
+
+  private isTaskCompletedOnDate(task: Task, directEntry: TaskProgressEntry | undefined): boolean {
+    const definitionCompleted = task.status === 'completed' || task.status === 'archived';
+
+    // Keep parent completion checks aligned with occurrence status resolution:
+    // a completed multi-day definition is complete everywhere, and a completed
+    // manual definition wins over stale progress on its original date only.
+    if (task.sourceType === 'multi_day' && definitionCompleted) {
+      return true;
+    }
+    if (task.sourceType === 'manual' && directEntry?.progressDate === task.taskDate && definitionCompleted) {
+      return true;
+    }
+
+    if (directEntry) {
+      return directEntry.status === 'completed' || directEntry.status === 'archived';
+    }
+
+    return task.sourceType !== 'daily' && definitionCompleted;
   }
 
   /** Write a per-date progress entry with an explicit percent and derived status. */

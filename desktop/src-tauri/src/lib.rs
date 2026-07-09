@@ -270,5 +270,78 @@ fn migrations() -> Vec<Migration> {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "complete_historic_multi_day_tasks",
+            sql: r#"
+            UPDATE tasks
+            SET status = 'completed',
+                completed_at = COALESCE((
+                  SELECT completed_entry.completed_at
+                  FROM task_progress_entries AS completed_entry
+                  WHERE completed_entry.task_id = tasks.id
+                    AND completed_entry.status = 'completed'
+                    AND completed_entry.deleted_at IS NULL
+                  ORDER BY completed_entry.progress_date DESC, completed_entry.updated_at DESC
+                  LIMIT 1
+                ), updated_at),
+                archived_at = NULL,
+                updated_at = CURRENT_TIMESTAMP,
+                sync_status = 'pending',
+                version = version + 1
+            WHERE source_type = 'multi_day'
+              AND status = 'active'
+              AND EXISTS (
+                SELECT 1
+                FROM task_progress_entries AS completed_entry
+                WHERE completed_entry.task_id = tasks.id
+                  AND completed_entry.status = 'completed'
+                  AND completed_entry.deleted_at IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM task_progress_entries AS newer_entry
+                    WHERE newer_entry.task_id = completed_entry.task_id
+                      AND newer_entry.deleted_at IS NULL
+                      AND (
+                        newer_entry.progress_date > completed_entry.progress_date
+                        OR (
+                          newer_entry.progress_date = completed_entry.progress_date
+                          AND newer_entry.updated_at > completed_entry.updated_at
+                        )
+                      )
+                  )
+              );
+        "#,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 9,
+            description: "deduplicate_active_task_postponements",
+            sql: r#"
+            UPDATE task_postponements AS duplicate
+            SET deleted_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP,
+                sync_status = 'pending',
+                version = version + 1
+            WHERE duplicate.deleted_at IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM task_postponements AS keeper
+                WHERE keeper.task_id = duplicate.task_id
+                  AND keeper.from_date = duplicate.from_date
+                  AND keeper.to_date = duplicate.to_date
+                  AND keeper.deleted_at IS NULL
+                  AND (
+                    keeper.created_at < duplicate.created_at
+                    OR (keeper.created_at = duplicate.created_at AND keeper.id < duplicate.id)
+                  )
+              );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_task_postponements_active_unique
+              ON task_postponements(task_id, from_date, to_date)
+              WHERE deleted_at IS NULL;
+        "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

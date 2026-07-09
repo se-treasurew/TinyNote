@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   updateTask: vi.fn(),
   updateTaskProgress: vi.fn(),
   postponeTask: vi.fn(),
+  postponeTasksForDate: vi.fn(),
   clearTaskPostponements: vi.fn(),
   completeTask: vi.fn(),
   restoreTask: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('../services/taskService', () => ({
     updateTask: mocks.updateTask,
     updateTaskProgress: mocks.updateTaskProgress,
     postponeTask: mocks.postponeTask,
+    postponeTasksForDate: mocks.postponeTasksForDate,
     clearTaskPostponements: mocks.clearTaskPostponements,
     completeTask: mocks.completeTask,
     restoreTask: mocks.restoreTask,
@@ -99,6 +101,7 @@ describe('task store date window behavior', () => {
       postponedFromDate: '2026-06-18',
       postponedToDate: '2026-06-19',
     }));
+    mocks.postponeTasksForDate.mockResolvedValue(undefined);
     mocks.clearTaskPostponements.mockResolvedValue(baseTask({ postponedAt: null, postponementHistory: [] }));
     mocks.completeTask.mockResolvedValue(baseTask({ status: 'completed' }));
     mocks.restoreTask.mockResolvedValue(baseTask({ status: 'active' }));
@@ -645,9 +648,12 @@ describe('task store date window behavior', () => {
 
     await useTaskStore.getState().postponeTasksForDate('2026-06-18');
 
-    expect(mocks.postponeTask).toHaveBeenCalledTimes(2);
-    expect(mocks.postponeTask).toHaveBeenNthCalledWith(1, 'manual-1', '2026-06-18', '2026-06-19', 25);
-    expect(mocks.postponeTask).toHaveBeenNthCalledWith(2, 'multi-due', '2026-06-18', '2026-06-19', 60);
+    expect(mocks.postponeTasksForDate).toHaveBeenCalledWith(
+      [manual, dueMulti],
+      '2026-06-18',
+      '2026-06-19',
+    );
+    expect(mocks.postponeTask).not.toHaveBeenCalled();
     expect(mocks.loadVisibleTasks).toHaveBeenCalledWith('2026-06-17', 3);
   });
 

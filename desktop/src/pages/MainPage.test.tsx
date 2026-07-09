@@ -124,6 +124,22 @@ describe('MainPage display layout', () => {
     expect(screen.queryByRole('button', { name: '清空已完成' })).not.toBeInTheDocument();
   });
 
+  it('keeps an inconsistent completed parent with an active child in the active section', () => {
+    const parent = baseTask({ id: 'parent', title: '已完成母任务', status: 'completed' });
+    const child = baseTask({ id: 'child', title: '未完成子任务', parentTaskId: 'parent', sortOrder: 1 });
+    useTaskStore.setState({
+      tasks: [parent, child],
+      tasksByDate: { '2026-06-16': [parent, child] },
+      selectedDate: '2026-06-16',
+    });
+
+    render(<MainPage />);
+
+    const activeSection = screen.getByRole('list', { name: '未完成任务' });
+    expect(within(activeSection).getByText('已完成母任务')).toBeInTheDocument();
+    expect(within(activeSection).getByText('未完成子任务')).toBeInTheDocument();
+  });
+
   it('collapses and expands a parent task subtree via the toggle', () => {
     const parent = baseTask({ id: 'parent', title: '母任务' });
     const child = baseTask({ id: 'child', title: '子任务', parentTaskId: 'parent', sortOrder: 1 });

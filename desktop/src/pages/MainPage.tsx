@@ -34,11 +34,11 @@ export function MainPage() {
   const isAboutOpen = useUiStore((state) => state.isAboutOpen);
   const selectedTasks = tasksByDate[selectedDate] ?? [];
   const trees = useMemo(() => groupTasksWithSubtasks(selectedTasks), [selectedTasks]);
-  const activeTrees = trees.filter((tree) => tree.task.status === 'active');
+  const activeTrees = trees.filter(treeHasActiveOccurrence);
   const doneTrees = trees.filter(
-    (tree) => tree.task.status === 'completed' || tree.task.status === 'archived',
+    (tree) => !treeHasActiveOccurrence(tree) && (tree.task.status === 'completed' || tree.task.status === 'archived'),
   );
-  const canPostponeSelectedDate = activeTrees.some((tree) => isBatchPostponeEligibleTask(tree.task, selectedDate));
+  const canPostponeSelectedDate = selectedTasks.some((task) => isBatchPostponeEligibleTask(task, selectedDate));
 
   const activeCountByDate = useMemo(() => {
     return tasks.reduce<Record<string, number>>((counts, task) => {
@@ -305,6 +305,10 @@ export function MainPage() {
       {isAboutOpen && <AboutPanel />}
     </main>
   );
+}
+
+function treeHasActiveOccurrence(tree: TaskTreeNode): boolean {
+  return tree.task.status === 'active' || tree.subtasks.some(treeHasActiveOccurrence);
 }
 
 function formatMonthDay(isoDate: string): string {

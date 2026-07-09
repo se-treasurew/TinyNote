@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(),
   listByParentId: vi.fn(),
   saveMany: vi.fn(),
+  findActivePostponement: vi.fn(),
   writeSyncLog: vi.fn(),
 }));
 
@@ -41,6 +42,7 @@ vi.mock('../repositories/taskRepository', () => ({
     upsert: mocks.upsert,
     listByParentId: mocks.listByParentId,
     saveMany: mocks.saveMany,
+    findActivePostponement: mocks.findActivePostponement,
   })),
 }));
 
@@ -130,6 +132,7 @@ describe('task service occurrence and progress behavior', () => {
     mocks.insert.mockResolvedValue(undefined);
     mocks.listByParentId.mockResolvedValue([]);
     mocks.saveMany.mockResolvedValue(undefined);
+    mocks.findActivePostponement.mockResolvedValue(null);
     mocks.writeSyncLog.mockResolvedValue(undefined);
   });
 
@@ -240,6 +243,107 @@ describe('task service occurrence and progress behavior', () => {
     }));
     expect(occurrence.status).toBe('completed');
     expect(occurrence.taskDate).toBe('2026-06-18');
+  });
+
+  it('completes a multi-day task globally from any occurrence date', async () => {
+    const task = baseTask({
+      sourceType: 'multi_day',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-20',
+    });
+    mocks.findById.mockResolvedValue(task);
+
+    await taskService.completeTask('task-1', '2026-06-18');
+
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'task-1',
+      status: 'completed',
+    }));
+    expect(mocks.upsertProgressEntry).not.toHaveBeenCalled();
+  });
+
+  it('restores a globally completed multi-day task from any occurrence date', async () => {
+    const task = baseTask({
+      sourceType: 'multi_day',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-20',
+      status: 'completed',
+      completedAt: '2026-06-17T01:00:00.000Z',
+    });
+    mocks.findById.mockResolvedValue(task);
+
+    await taskService.restoreTask('task-1', '2026-06-19');
+
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'task-1',
+      status: 'active',
+      completedAt: null,
+    }));
+    expect(mocks.upsertProgressEntry).not.toHaveBeenCalled();
+  });
+
+  it('rejects completing a parent with an unfinished direct child', async () => {
+    const parent = baseTask({ id: 'parent' });
+    const child = baseTask({ id: 'child', parentTaskId: 'parent', status: 'active' });
+    mocks.findById.mockResolvedValue(parent);
+    mocks.listByParentId.mockResolvedValue([child]);
+
+    await expect(taskService.completeTask('parent', '2026-06-16'))
+      .rejects.toThrow('Cannot complete task with unfinished subtasks');
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it('treats a globally completed multi-day child as complete despite a stale direct progress entry', async () => {
+    const parent = baseTask({
+      id: 'parent',
+      sourceType: 'multi_day',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-20',
+    });
+    const child = baseTask({
+      id: 'child',
+      parentTaskId: 'parent',
+      sourceType: 'multi_day',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-20',
+      status: 'completed',
+      completedAt: '2026-06-17T01:00:00.000Z',
+    });
+    mocks.findById.mockResolvedValue(parent);
+    mocks.listByParentId.mockResolvedValue([child]);
+    mocks.listProgressEntries.mockResolvedValue([
+      progressEntry({ taskId: 'child', progressDate: '2026-06-18', percent: 50, status: 'active' }),
+    ]);
+
+    await taskService.completeTask('parent', '2026-06-18');
+
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'parent',
+      status: 'completed',
+    }));
+  });
+
+  it('treats a completed manual child as complete on its definition date despite a stale direct progress entry', async () => {
+    const parent = baseTask({ id: 'parent', taskDate: '2026-06-18' });
+    const child = baseTask({
+      id: 'child',
+      parentTaskId: 'parent',
+      taskDate: '2026-06-18',
+      status: 'completed',
+      completedAt: '2026-06-17T01:00:00.000Z',
+    });
+    mocks.findById.mockResolvedValue(parent);
+    mocks.listByParentId.mockResolvedValue([child]);
+    mocks.listProgressEntries.mockResolvedValue([
+      progressEntry({ taskId: 'child', progressDate: '2026-06-18', percent: 100, status: 'active' }),
+    ]);
+
+    await taskService.completeTask('parent', '2026-06-18');
+
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'parent',
+      status: 'completed',
+    }));
   });
 
   it('preserves postponement history when completing a postponed occurrence', async () => {
@@ -502,6 +606,71 @@ describe('task service occurrence and progress behavior', () => {
       status: 'active',
     }));
     expect(occurrence.progressPercent).toBe(65);
+  });
+
+  it('postpones every task in a parent-child batch only once', async () => {
+    const parent = baseTask({ id: 'parent', taskDate: '2026-06-18' });
+    const child = baseTask({ id: 'child', parentTaskId: 'parent', taskDate: '2026-06-18' });
+    mocks.findById.mockImplementation(async (id: string) => {
+      if (id === 'parent') return parent;
+      if (id === 'child') return child;
+      return null;
+    });
+    mocks.listByParentId.mockImplementation(async (id: string) => id === 'parent' ? [child] : []);
+
+    await taskService.postponeTasksForDate([
+      { id: 'parent', progressPercent: 10 },
+      { id: 'child', progressPercent: 20 },
+    ], '2026-06-18', '2026-06-19');
+
+    expect(mocks.upsertPostponement).toHaveBeenCalledTimes(2);
+    expect(mocks.upsertPostponement).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'parent' }));
+    expect(mocks.upsertPostponement).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'child' }));
+  });
+
+  it('treats an existing active postponement as idempotent', async () => {
+    const task = baseTask({ taskDate: '2026-06-18' });
+    mocks.findById.mockResolvedValue(task);
+    mocks.findActivePostponement.mockResolvedValue(taskPostponement({
+      fromDate: '2026-06-18',
+      toDate: '2026-06-20',
+    }));
+
+    await taskService.postponeTask('task-1', '2026-06-18', '2026-06-20');
+
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.upsertPostponement).not.toHaveBeenCalled();
+    expect(mocks.upsertProgressEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not carry a previous daily completion into parent progress for the next date', async () => {
+    const parent = baseTask({
+      id: 'parent',
+      sourceType: 'multi_day',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-20',
+    });
+    const child = baseTask({
+      id: 'child',
+      parentTaskId: 'parent',
+      sourceType: 'daily',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-20',
+    });
+    mocks.findById.mockImplementation(async (id: string) => id === 'child' ? child : id === 'parent' ? parent : null);
+    mocks.listByParentId.mockImplementation(async (id: string) => id === 'parent' ? [child] : []);
+    mocks.listProgressEntries.mockResolvedValue([
+      progressEntry({ taskId: 'child', progressDate: '2026-06-17', percent: 100, status: 'completed' }),
+    ]);
+
+    await taskService.restoreTask('child', '2026-06-18');
+
+    expect(mocks.upsertProgressEntry).toHaveBeenLastCalledWith(expect.objectContaining({
+      taskId: 'parent',
+      progressDate: '2026-06-18',
+      percent: 0,
+      status: 'active',
+    }));
   });
 
   it('postpones multi-day tasks and extends the deadline only when needed', async () => {

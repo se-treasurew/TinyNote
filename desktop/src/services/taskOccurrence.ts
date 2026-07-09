@@ -69,7 +69,7 @@ function buildOccurrence(
 ): TaskOccurrence {
   const directEntry = entries.find((entry) => entry.progressDate === date);
   const inheritedEntry = directEntry ?? resolveInheritedProgressEntry(task, date, entries, today);
-  const status = resolveOccurrenceStatus(task, directEntry);
+  const status = resolveOccurrenceStatus(task, date, directEntry);
   const activePostponements = postponements.filter((postponement) => !postponement.deletedAt);
   const occurrencePostponement = resolveOccurrencePostponement(activePostponements, date);
 
@@ -119,7 +119,20 @@ function resolveOccurrencePostponement(postponements: TaskPostponement[], date: 
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.updatedAt.localeCompare(a.updatedAt))[0];
 }
 
-function resolveOccurrenceStatus(task: Task, directEntry: TaskProgressEntry | undefined): TaskStatus {
+function resolveOccurrenceStatus(task: Task, date: string, directEntry: TaskProgressEntry | undefined): TaskStatus {
+  // Multi-day completion is a definition-level decision. Once completed, every
+  // occurrence remains completed even if an older per-day progress row is active.
+  if (task.sourceType === 'multi_day' && task.status !== 'active') {
+    return task.status;
+  }
+
+  // A manual task's definition date represents the task itself. Legacy progress
+  // rows on that date must not resurrect an already completed task. Postponed
+  // target dates remain independent and continue to use their direct row.
+  if (task.sourceType === 'manual' && date === task.taskDate && task.status !== 'active') {
+    return task.status;
+  }
+
   if (directEntry) {
     return directEntry.status;
   }

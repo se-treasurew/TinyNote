@@ -343,11 +343,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     const toDate = addDays(date, 1);
     invalidatePendingLoads();
-      set({ isLoading: false });
+    set({ isLoading: false });
     try {
-      for (const task of eligibleTasks) {
-        await taskService.postponeTask(task.id, date, toDate, task.progressPercent);
-      }
+      await taskService.postponeTasksForDate(eligibleTasks, date, toDate);
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);
     } catch (error) {
       await get().loadTasks(get().visibleDays, get().visibleStartDate, get().selectedDate);

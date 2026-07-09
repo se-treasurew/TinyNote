@@ -27,4 +27,8 @@ describe('global glass background CSS', () => {
     expect(css).toMatch(/\.check-button\s*\{[^}]*display:\s*inline-grid;[^}]*place-items:\s*center;[^}]*padding:\s*0;[^}]*line-height:\s*0;/s);
     expect(css).toMatch(/\.check-button svg\s*\{[^}]*display:\s*block;[^}]*width:\s*11px;[^}]*height:\s*11px;/s);
   });
+
+  it('visibly disables the completion control while direct subtasks remain unfinished', () => {
+    expect(css).toMatch(/\.check-button:disabled[^}]*cursor:\s*not-allowed;[^}]*opacity:\s*0\.48;/s);
+  });
 });

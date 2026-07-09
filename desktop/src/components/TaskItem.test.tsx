@@ -91,6 +91,12 @@ describe('TaskItem scheduling controls', () => {
     expect(screen.getByLabelText('展开子任务')).toBeInTheDocument();
   });
 
+  it('does not allow a parent with unfinished subtasks to be completed directly', () => {
+    render(<TaskItem task={baseTask({ title: '母任务' })} hasSubtasks subtaskBadge={{ done: 0, total: 1 }} />);
+
+    expect(screen.getByRole('button', { name: '完成任务：母任务' })).toBeDisabled();
+  });
+
   it('does not render a collapse toggle for tasks without subtasks', () => {
     render(<TaskItem task={baseTask()} />);
     expect(screen.queryByLabelText('收起子任务')).not.toBeInTheDocument();

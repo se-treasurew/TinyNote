@@ -60,6 +60,8 @@ export function TaskItem({
     (draftSourceType === 'manual' || Boolean(draftEndDate && draftEndDate >= draftStartDate));
   const canAddSubtask = depth < 2;
   const showProgress = task.status === 'active' && !hasSubtasks;
+  const hasUnfinishedSubtasks = hasSubtasks && (subtaskBadge?.done ?? 0) < (subtaskBadge?.total ?? 0);
+  const isCompletionBlocked = !isDone && hasUnfinishedSubtasks;
 
   useEffect(() => {
     resetDrafts();
@@ -242,6 +244,8 @@ export function TaskItem({
         type="button"
         className={`check-button ${isDone ? 'completed' : ''}`}
         aria-label={`${isDone ? '恢复任务' : '完成任务'}：${task.title}`}
+        title={isCompletionBlocked ? '请先完成全部直接子任务' : undefined}
+        disabled={isCompletionBlocked}
         onClick={() => void toggleCompleted()}
       >
         {isDone && <Check size={13} />}

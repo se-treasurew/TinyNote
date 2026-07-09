@@ -31,13 +31,15 @@ describe('GitHub release workflow', () => {
       encoding: 'utf8',
     });
 
+    expect(changelog).toContain('## [1.2.2]');
     expect(changelog).toContain('## [1.2.1]');
     expect(changelog).toContain('## [1.2.0]');
     expect(changelog).toContain('## [1.1.0]');
     expect(changelog).toContain('## [1.0.0]');
-    expect(notes).toContain('进度达到 100%');
-    expect(notes).toContain('截止 6月30日');
-    expect(notes).toContain('应用图标');
+    expect(notes).toContain('多日任务');
+    expect(notes).toContain('重复写入延期历史');
+    expect(notes).toContain('未完成直接子任务');
+    expect(notes).not.toContain('## [1.2.1]');
     expect(notes).not.toContain('## [1.2.0]');
     expect(notes).not.toContain('## [1.1.0]');
     expect(notes).not.toContain('## [1.0.0]');
