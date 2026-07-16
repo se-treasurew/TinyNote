@@ -31,4 +31,11 @@ describe('global glass background CSS', () => {
   it('visibly disables the completion control while direct subtasks remain unfinished', () => {
     expect(css).toMatch(/\.check-button:disabled[^}]*cursor:\s*not-allowed;[^}]*opacity:\s*0\.48;/s);
   });
+
+  it('keeps task management edit rows in normal vertical flow', () => {
+    expect(css).toMatch(/\.panel-list\s*{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*align-items:\s*stretch;[^}]*overflow-y:\s*auto;/s);
+    expect(css).toMatch(/\.panel-list\s*>\s*\.routine-row\s*{[^}]*flex:\s*0\s+0\s+auto;/s);
+    expect(css).toMatch(/\.routine-row\.editing\s*{[^}]*display:\s*block;[^}]*height:\s*auto;/s);
+    expect(css).toMatch(/\.panel-edit-form\s*{[^}]*position:\s*static;[^}]*box-sizing:\s*border-box;/s);
+  });
 });

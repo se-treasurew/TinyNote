@@ -1,5 +1,5 @@
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useContext, useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { useTaskStore } from '../stores/taskStore';
 import { taskService } from '../services/taskService';
@@ -17,6 +17,7 @@ export function TaskManagePanel() {
   const [mode, setMode] = useState<TaskSourceType>('daily');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const editingRowRef = useRef<HTMLDivElement | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
@@ -36,6 +37,14 @@ export function TaskManagePanel() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!editingId || typeof editingRowRef.current?.scrollIntoView !== 'function') {
+      return;
+    }
+
+    editingRowRef.current.scrollIntoView({ block: 'nearest' });
+  }, [editingId]);
 
   const filtered = useMemo(() => tasks.filter((t) => t.sourceType === mode), [tasks, mode]);
 
@@ -176,7 +185,11 @@ export function TaskManagePanel() {
       )}
       <div className="panel-list">
         {filtered.map((task) => (
-          <div className={`routine-row ${editingId === task.id ? 'editing' : ''}`} key={task.id}>
+          <div
+            className={`routine-row ${editingId === task.id ? 'editing' : ''}`}
+            key={task.id}
+            ref={editingId === task.id ? editingRowRef : undefined}
+          >
             {editingId === task.id ? (
               <div className="panel-form panel-edit-form">
                 <label className="field-label">

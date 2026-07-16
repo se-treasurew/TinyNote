@@ -38,8 +38,14 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
 });
 
 describe('TaskManagePanel', () => {
+  const scrollIntoView = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
     vi.mocked(taskService.loadAll).mockResolvedValue([]);
     useUiStore.setState({
       currentPanel: 'taskManage',
@@ -144,6 +150,32 @@ describe('TaskManagePanel', () => {
     expect(screen.getByLabelText('编辑任务标题')).toHaveValue('复盘任务');
     expect(screen.getByLabelText('编辑开始日期')).toHaveValue('2026-06-18');
     expect(screen.getByLabelText('编辑结束日期')).toHaveValue('2026-06-20');
+  });
+
+  it('keeps an expanded middle editor in its own list row and scrolls it into view', async () => {
+    vi.mocked(taskService.loadAll).mockResolvedValue([
+      baseTask({ id: 'task-1', title: '第一项任务' }),
+      baseTask({ id: 'task-2', title: '第二项任务', sortOrder: 1 }),
+      baseTask({ id: 'task-3', title: '第三项任务', sortOrder: 2 }),
+    ]);
+    await renderPanel();
+
+    fireEvent.click(screen.getAllByRole('button', { name: '编辑' })[1]);
+
+    const rows = document.querySelectorAll('.panel-list > .routine-row');
+    const editor = screen.getByLabelText('编辑任务标题');
+    const editingRow = editor.closest('.routine-row');
+    expect(rows).toHaveLength(3);
+    expect(editingRow).toBe(rows[1]);
+    expect(rows[0]).not.toHaveClass('editing');
+    expect(rows[1]).toHaveClass('editing');
+    expect(rows[2]).not.toHaveClass('editing');
+    expect(rows[2]).toContainElement(screen.getByText('第三项任务'));
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(screen.queryByLabelText('编辑任务标题')).not.toBeInTheDocument();
+    expect(document.querySelector('.routine-row.editing')).toBeNull();
   });
 });
 

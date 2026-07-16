@@ -1346,11 +1346,16 @@ button {
 }
 
 .panel-list {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
   min-height: 0;
   overflow-y: auto;
+}
+
+.panel-list > .routine-row {
+  flex: 0 0 auto;
 }
 
 .routine-row {
@@ -1370,13 +1375,15 @@ button {
 }
 
 .routine-row.editing {
-  grid-template-columns: 1fr;
-  align-items: stretch;
+  display: block;
+  height: auto;
+  background: var(--panel-strong);
 }
 
 .panel-edit-form {
-  grid-column: 1 / -1;
+  position: static;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .routine-row > div {
