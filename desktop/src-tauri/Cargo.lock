@@ -4938,7 +4938,7 @@ dependencies = [
 
 [[package]]
 name = "tinynote"
-version = "1.2.4"
+version = "1.2.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -4951,6 +4951,7 @@ dependencies = [
  "tauri-plugin-sql",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -1,6 +1,32 @@
 import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
+import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state';
 import type { AppSettings } from '../types/settings';
+
+const MIN_WINDOW_WIDTH = 320;
+const MIN_WINDOW_HEIGHT = 520;
+const DEFAULT_WINDOW_WIDTH = 360;
+const DEFAULT_WINDOW_HEIGHT = 620;
+
+async function ensureUsableWindowBounds(): Promise<boolean> {
+  const win = getCurrentWindow();
+  const [size, rawScaleFactor] = await Promise.all([
+    win.innerSize(),
+    win.scaleFactor(),
+  ]);
+  const scaleFactor = Number.isFinite(rawScaleFactor) && rawScaleFactor > 0
+    ? rawScaleFactor
+    : 1;
+  const logicalWidth = size.width / scaleFactor;
+  const logicalHeight = size.height / scaleFactor;
+
+  if (logicalWidth >= MIN_WINDOW_WIDTH && logicalHeight >= MIN_WINDOW_HEIGHT) {
+    return false;
+  }
+
+  await win.setSize(new LogicalSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT));
+  return true;
+}
 
 export const windowService = {
   async applySettings(settings: AppSettings): Promise<void> {
@@ -28,6 +54,14 @@ export const windowService = {
     await getCurrentWindow().minimize();
   },
 
+  ensureUsableWindowBounds,
+
+  async prepareForUpdateRelaunch(): Promise<void> {
+    await getCurrentWindow().unminimize();
+    await ensureUsableWindowBounds();
+    await saveWindowState(StateFlags.ALL);
+  },
+
   async setAutostart(enabled: boolean): Promise<void> {
     if (enabled) {
       await enable();
@@ -42,7 +76,7 @@ export const windowService = {
 
   async resetWindowBounds(): Promise<void> {
     const win = getCurrentWindow();
-    await win.setSize(new LogicalSize(360, 620));
+    await win.setSize(new LogicalSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT));
     await win.setPosition(new LogicalPosition(80, 80));
   },
 };

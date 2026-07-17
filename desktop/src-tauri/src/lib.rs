@@ -5,8 +5,17 @@ use tauri::{
 };
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+const MIN_WINDOW_WIDTH: f64 = 320.0;
+const MIN_WINDOW_HEIGHT: f64 = 520.0;
+const DEFAULT_WINDOW_WIDTH: f64 = 360.0;
+const DEFAULT_WINDOW_HEIGHT: f64 = 620.0;
+const WINDOW_STATE_FILENAME: &str = ".window-state.json";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    sanitize_window_state_file(&context.config().identifier);
+
     tauri::Builder::default()
         .plugin(
             tauri_plugin_sql::Builder::default()
@@ -35,8 +44,122 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running TinyNote");
+}
+
+fn sanitize_window_state_file(identifier: &str) {
+    let Some(path) = window_state_path(identifier) else {
+        return;
+    };
+    let Ok(contents) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let Ok(mut states) = serde_json::from_str::<serde_json::Value>(&contents) else {
+        return;
+    };
+    let scale_factor = saved_window_scale_factor(&states);
+
+    if sanitize_window_state_value(&mut states, scale_factor) {
+        if let Ok(contents) = serde_json::to_vec_pretty(&states) {
+            let _ = std::fs::write(path, contents);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn window_state_path(identifier: &str) -> Option<std::path::PathBuf> {
+    std::env::var_os("APPDATA")
+        .map(std::path::PathBuf::from)
+        .map(|path| path.join(identifier).join(WINDOW_STATE_FILENAME))
+}
+
+#[cfg(not(windows))]
+fn window_state_path(_identifier: &str) -> Option<std::path::PathBuf> {
+    None
+}
+
+#[cfg(windows)]
+fn saved_window_scale_factor(states: &serde_json::Value) -> Option<f64> {
+    use windows_sys::Win32::{
+        Foundation::POINT,
+        Graphics::Gdi::{MonitorFromPoint, MONITOR_DEFAULTTONEAREST},
+        UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI},
+    };
+
+    let main = states.get("main")?;
+    let x = main
+        .get("x")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0) as i32;
+    let y = main
+        .get("y")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0) as i32;
+
+    unsafe {
+        let monitor = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
+        if !monitor.is_null() {
+            let mut dpi_x = 0;
+            let mut dpi_y = 0;
+            if GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) >= 0
+                && dpi_x > 0
+            {
+                return Some(f64::from(dpi_x) / 96.0);
+            }
+        }
+
+        let dpi = GetDpiForSystem();
+        (dpi > 0).then(|| f64::from(dpi) / 96.0)
+    }
+}
+
+#[cfg(not(windows))]
+fn saved_window_scale_factor(_states: &serde_json::Value) -> Option<f64> {
+    None
+}
+
+fn sanitize_window_state_value(states: &mut serde_json::Value, scale_factor: Option<f64>) -> bool {
+    let Some(main) = states.get("main") else {
+        return false;
+    };
+    let Some(width) = main.get("width").and_then(serde_json::Value::as_f64) else {
+        return false;
+    };
+    let Some(height) = main.get("height").and_then(serde_json::Value::as_f64) else {
+        return false;
+    };
+    let scale_factor = scale_factor.filter(|scale| scale.is_finite() && *scale > 0.0);
+    let (logical_width, logical_height) = scale_factor
+        .map(|scale| (width / scale, height / scale))
+        .unwrap_or((width, height));
+
+    if logical_width >= MIN_WINDOW_WIDTH && logical_height >= MIN_WINDOW_HEIGHT {
+        return false;
+    }
+
+    if let Some(scale) = scale_factor {
+        let Some(main) = states
+            .get_mut("main")
+            .and_then(serde_json::Value::as_object_mut)
+        else {
+            return false;
+        };
+        main.insert(
+            "width".into(),
+            serde_json::Value::from((DEFAULT_WINDOW_WIDTH * scale).round() as u64),
+        );
+        main.insert(
+            "height".into(),
+            serde_json::Value::from((DEFAULT_WINDOW_HEIGHT * scale).round() as u64),
+        );
+    } else if let Some(states) = states.as_object_mut() {
+        states.remove("main");
+    } else {
+        return false;
+    }
+
+    true
 }
 
 fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
@@ -46,7 +169,10 @@ fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let topmost = MenuItem::with_id(app, "toggle_topmost", "置顶", true, None::<&str>)?;
     let autostart = MenuItem::with_id(app, "toggle_autostart", "开机启动", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &add_today, &lock, &topmost, &autostart, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&show, &add_today, &lock, &topmost, &autostart, &quit],
+    )?;
 
     let mut builder = TrayIconBuilder::new()
         .tooltip("TinyNote 小笺")
@@ -384,4 +510,69 @@ fn migrations() -> Vec<Migration> {
             kind: MigrationKind::Up,
         },
     ]
+}
+
+#[cfg(test)]
+mod window_state_tests {
+    use super::sanitize_window_state_value;
+    use serde_json::json;
+
+    #[test]
+    fn repairs_an_invalid_main_window_size_for_the_current_scale_factor() {
+        let mut states = json!({
+            "main": {
+                "width": 237,
+                "height": 39,
+                "x": 1010,
+                "y": 299
+            },
+            "secondary": {
+                "width": 200,
+                "height": 100
+            }
+        });
+
+        assert!(sanitize_window_state_value(&mut states, Some(1.5)));
+        assert_eq!(states["main"]["width"], 540);
+        assert_eq!(states["main"]["height"], 930);
+        assert_eq!(states["main"]["x"], 1010);
+        assert_eq!(states["main"]["y"], 299);
+        assert_eq!(states["secondary"]["width"], 200);
+    }
+
+    #[test]
+    fn keeps_a_valid_main_window_size_unchanged() {
+        let mut states = json!({
+            "main": {
+                "width": 540,
+                "height": 930,
+                "x": 100,
+                "y": 80
+            }
+        });
+        let original = states.clone();
+
+        assert!(!sanitize_window_state_value(&mut states, Some(1.5)));
+        assert_eq!(states, original);
+    }
+
+    #[test]
+    fn drops_only_the_invalid_main_state_when_scale_factor_is_unavailable() {
+        let mut states = json!({
+            "main": {
+                "width": 237,
+                "height": 39,
+                "x": 1010,
+                "y": 299
+            },
+            "secondary": {
+                "width": 640,
+                "height": 480
+            }
+        });
+
+        assert!(sanitize_window_state_value(&mut states, None));
+        assert!(states.get("main").is_none());
+        assert_eq!(states["secondary"]["width"], 640);
+    }
 }

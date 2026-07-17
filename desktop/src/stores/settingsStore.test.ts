@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   updateSetting: vi.fn(),
   applySettings: vi.fn(),
   readAutostart: vi.fn(),
+  ensureUsableWindowBounds: vi.fn(),
 }));
 
 vi.mock('../services/settingsService', () => ({
@@ -21,6 +22,7 @@ vi.mock('../services/settingsService', () => ({
 vi.mock('../services/windowService', () => ({
   windowService: {
     readAutostart: mocks.readAutostart,
+    ensureUsableWindowBounds: mocks.ensureUsableWindowBounds,
     resetWindowBounds: vi.fn(async () => undefined),
   },
 }));
@@ -43,6 +45,17 @@ describe('settings store persistence behavior', () => {
       settings: { ...defaultSettings },
       isLoading: false,
     });
+    mocks.loadSettings.mockResolvedValue({ ...defaultSettings });
+    mocks.applySettings.mockResolvedValue(undefined);
+    mocks.readAutostart.mockResolvedValue(defaultSettings.autostart);
+    mocks.ensureUsableWindowBounds.mockResolvedValue(undefined);
+  });
+
+  it('checks restored window bounds whenever startup settings load', async () => {
+    await useSettingsStore.getState().loadSettings();
+
+    expect(mocks.applySettings).toHaveBeenCalledTimes(1);
+    expect(mocks.ensureUsableWindowBounds).toHaveBeenCalledTimes(1);
   });
 
   it('applies setting changes optimistically while persistence is pending', async () => {

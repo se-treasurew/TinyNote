@@ -14,4 +14,11 @@ describe('Tauri main capability ACL', () => {
     expect(capability.permissions).toContain('sql:default');
     expect(capability.permissions).toContain('sql:allow-execute');
   });
+
+  it('allows restoring a minimized window before an update relaunch', () => {
+    const capabilityPath = resolve(process.cwd(), 'src-tauri/capabilities/default.json');
+    const capability = JSON.parse(readFileSync(capabilityPath, 'utf8')) as CapabilityFile;
+
+    expect(capability.permissions).toContain('core:window:allow-unminimize');
+  });
 });

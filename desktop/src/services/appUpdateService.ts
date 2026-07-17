@@ -2,6 +2,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type DownloadEvent, type Update } from '@tauri-apps/plugin-updater';
+import { windowService } from './windowService';
 
 export const TINYNOTE_GITHUB_URL = 'https://github.com/se-treasurew/TinyNote';
 
@@ -65,6 +66,7 @@ export const appUpdateService = {
       onProgress(nextProgress);
     });
     pendingUpdate = null;
+    await windowService.prepareForUpdateRelaunch().catch(() => undefined);
     await relaunch();
   },
 };

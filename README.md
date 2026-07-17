@@ -4,7 +4,7 @@
   <img src="desktop/src-tauri/icons/128x128.png" alt="TinyNote 应用图标" width="96">
 </p>
 
-TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + React + TypeScript + SQLite 构建。界面简洁，毛玻璃主题，本地离线可用。当前版本 **v1.2.4**。
+TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + React + TypeScript + SQLite 构建。界面简洁，毛玻璃主题，本地离线可用。当前版本 **v1.2.5**。
 
 ## 功能
 
@@ -15,7 +15,7 @@ TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + Rea
 - **任务操作**：快速添加、内联编辑、完成/恢复、逐条删除、任务详情与高级排期
 - **顺延**：单任务延期到指定日期、批量顺延当日活跃任务到次日，并可清除延期标识与历史；延期副本按目标日期独立完成/恢复，批量父子级联会自动去重，延期子任务会连带母任务及祖先同步延期
 - **任务管理面板**：集中创建与管理每日/多日任务，支持不会遮挡后续任务的行内展开编辑（底部栏仅快速添加普通任务）
-- **窗口特性**：无边框毛玻璃窗口、置顶、固定桌面、关闭隐藏到托盘、窗口状态记忆、开机自启、系统托盘菜单
+- **窗口特性**：无边框毛玻璃窗口、置顶、固定桌面、关闭隐藏到托盘、窗口状态记忆与异常尺寸自动恢复、开机自启、系统托盘菜单
 - **主题系统**：7 套主题（毛玻璃蓝/白/薄荷/紫、亮色、暗色、跟随系统），透明度 0%–100% 全范围可调，支持自定义背景图
 - **数据管理**：JSON 导出 / 导入，同步字段预留（user_id、device_id、sync_status、version）
 - **应用更新**：关于面板展示版本、GitHub 链接、更新说明，并通过签名安装包完成自动更新
@@ -25,6 +25,10 @@ TinyNote 是一款轻量 Windows 桌面待办管理应用，基于 Tauri 2 + Rea
 在 [GitHub Releases](https://github.com/se-treasurew/TinyNote/releases) 下载最新的 `TinyNote_*_x64-setup.exe` 并运行。应用内点击标题栏“小笺”可打开关于面板并检查更新。
 
 > ⚠️ **不支持降级安装**：升级到新版本后，请勿安装更旧的安装包。TinyNote 的数据库迁移只增不删，降级会导致应用无法启动。如必须运行旧版本，需先卸载当前版本并删除本地数据库（会丢失全部本地数据）后全新安装。
+
+### v1.2.4 窗口异常恢复
+
+如应用内更新后界面只剩日期栏，请升级到 v1.2.5。无法在应用内升级时，先完全退出 TinyNote，仅删除 `%APPDATA%\com.tinynote.desktop\.window-state.json`，再重启应用或运行新安装包。该文件只记录窗口位置和尺寸；请勿删除同目录下的 `tinynote.db`。
 
 更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -105,7 +109,7 @@ Repository（SQL 查询）→ Service（业务逻辑）→ Store（Zustand）→
 
 ## 版本
 
-当前版本 **1.2.4**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致；标题栏版本号通过 Tauri 运行时 `getVersion()` 读取，无需手动同步。
+当前版本 **1.2.5**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致；标题栏版本号通过 Tauri 运行时 `getVersion()` 读取，无需手动同步。
 
 发布时需先在 `CHANGELOG.md` 增加对应版本章节，再推送同版本的 `v*` 标签。GitHub Actions 会构建 NSIS/MSI、签名文件和 `latest.json`，并将该章节作为 Release 与应用内更新说明。
 

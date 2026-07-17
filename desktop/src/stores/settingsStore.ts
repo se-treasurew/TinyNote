@@ -26,6 +26,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const autostart = await windowService.readAutostart().catch(() => settings.autostart);
     const merged = { ...settings, autostart };
     await settingsService.applySettings(merged);
+    await windowService.ensureUsableWindowBounds().catch(() => false);
     set({ settings: merged, isLoading: false });
     return merged;
   },

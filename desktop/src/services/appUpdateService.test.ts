@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   check: vi.fn(),
   relaunch: vi.fn(),
   openUrl: vi.fn(),
+  prepareForUpdateRelaunch: vi.fn(),
 }));
 
 vi.mock('@tauri-apps/api/app', () => ({
@@ -23,6 +24,12 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: mocks.openUrl,
 }));
 
+vi.mock('./windowService', () => ({
+  windowService: {
+    prepareForUpdateRelaunch: mocks.prepareForUpdateRelaunch,
+  },
+}));
+
 const { appUpdateService } = await import('./appUpdateService');
 
 describe('app update service', () => {
@@ -32,6 +39,7 @@ describe('app update service', () => {
     mocks.check.mockResolvedValue(null);
     mocks.relaunch.mockResolvedValue(undefined);
     mocks.openUrl.mockResolvedValue(undefined);
+    mocks.prepareForUpdateRelaunch.mockResolvedValue(undefined);
   });
 
   it('returns static about information with the configured app version', async () => {
@@ -82,6 +90,9 @@ describe('app update service', () => {
     expect(progress).toHaveBeenCalledWith({ phase: 'started', downloaded: 0, total: 100, percent: 0 });
     expect(progress).toHaveBeenCalledWith({ phase: 'progress', downloaded: 40, total: 100, percent: 40 });
     expect(progress).toHaveBeenCalledWith({ phase: 'finished', downloaded: 40, total: 100, percent: 40 });
+    expect(mocks.prepareForUpdateRelaunch).toHaveBeenCalledTimes(1);
+    expect(mocks.prepareForUpdateRelaunch.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.relaunch.mock.invocationCallOrder[0]);
     expect(mocks.relaunch).toHaveBeenCalledTimes(1);
   });
 
@@ -92,5 +103,23 @@ describe('app update service', () => {
       body: '',
       date: null,
     }, vi.fn())).rejects.toThrow('没有可安装的更新，请先检查更新');
+  });
+
+  it('still relaunches when saving the repaired window state fails', async () => {
+    const downloadAndInstall = vi.fn().mockResolvedValue(undefined);
+    mocks.check.mockResolvedValue({
+      version: '1.0.2',
+      currentVersion: '1.0.1',
+      body: '',
+      date: null,
+      downloadAndInstall,
+    });
+    mocks.prepareForUpdateRelaunch.mockRejectedValue(new Error('state write failed'));
+
+    const update = await appUpdateService.checkForUpdate();
+    await appUpdateService.installUpdate(update!, vi.fn());
+
+    expect(mocks.prepareForUpdateRelaunch).toHaveBeenCalledTimes(1);
+    expect(mocks.relaunch).toHaveBeenCalledTimes(1);
   });
 });
