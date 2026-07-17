@@ -18,6 +18,7 @@ export interface Task {
   parentTaskId: string | null;
   sortOrder: number;
   completedAt: string | null;
+  completedOnDate: string | null;
   archivedAt: string | null;
   deletedAt: string | null;
   postponedAt: string | null;
@@ -107,6 +108,7 @@ export interface TaskRow {
   parent_task_id: string | null;
   sort_order: number;
   completed_at: string | null;
+  completed_on_date: string | null;
   archived_at: string | null;
   deleted_at: string | null;
   postponed_at: string | null;

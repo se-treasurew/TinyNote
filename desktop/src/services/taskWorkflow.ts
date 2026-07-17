@@ -20,6 +20,7 @@ export function applyRestore<T extends Task>(task: T, now: string): T {
     ...task,
     status: 'active',
     completedAt: null,
+    completedOnDate: null,
     archivedAt: null,
     deletedAt: null,
     updatedAt: now,

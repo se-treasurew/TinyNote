@@ -32,6 +32,7 @@ const task = (id: string, date: string): Task => ({
   parentTaskId: null,
   sortOrder: 0,
   completedAt: null,
+  completedOnDate: null,
   archivedAt: null,
   deletedAt: null,
   postponedAt: null,
@@ -57,7 +58,7 @@ describe('routine repository generated task insertion', () => {
     const insertedTaskIds: string[] = [];
     mocks.executeInTransaction.mockImplementation(async (_db: unknown, sql: string, bindValues?: unknown[]) => {
       if (sql.includes('INSERT INTO tasks')) {
-        if (bindValues?.[22] === '2026-06-18') {
+        if (bindValues?.[23] === '2026-06-18') {
           return { rowsAffected: 0 };
         }
         insertedTaskIds.push(String(bindValues?.[0]));

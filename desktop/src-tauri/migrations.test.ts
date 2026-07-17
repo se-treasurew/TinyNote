@@ -93,4 +93,16 @@ describe('Tauri SQL migrations', () => {
     expect(migration).toContain('deleted_at IS NULL');
     expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_task_postponements_active_unique');
   });
+
+  it('stores and backfills multi-day completion boundaries in migration 10', () => {
+    const libRs = readFileSync(resolve(process.cwd(), 'src-tauri/src/lib.rs'), 'utf8');
+    const migration = migrationSql(libRs, 10);
+
+    expect(migration).toContain('ALTER TABLE tasks ADD COLUMN completed_on_date TEXT');
+    expect(migration).toContain("source_type = 'multi_day'");
+    expect(migration).toContain("status IN ('completed', 'archived')");
+    expect(migration).toContain('task_progress_entries');
+    expect(migration).toContain('progress_date');
+    expect(migration).toContain('completed_at');
+  });
 });

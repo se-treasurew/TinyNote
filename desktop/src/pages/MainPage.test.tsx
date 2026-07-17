@@ -46,6 +46,7 @@ const baseTask = (overrides: Partial<TaskOccurrence> = {}): TaskOccurrence => ({
   parentTaskId: null,
   sortOrder: 0,
   completedAt: null,
+  completedOnDate: null,
   archivedAt: null,
   deletedAt: null,
   postponedAt: null,
@@ -122,6 +123,105 @@ describe('MainPage display layout', () => {
     expect(completedTitle.closest('.task-item')).toHaveClass('completed');
     expect(screen.getByRole('button', { name: '恢复任务：已完成整理' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '清空已完成' })).not.toBeInTheDocument();
+  });
+
+  it('hides a completed multi-day task after its completion occurrence date', () => {
+    const completed = {
+      ...baseTask({
+        id: 'completed-multi-day',
+        title: '已经完成的多日任务',
+        sourceType: 'multi_day',
+        definitionTaskDate: '2026-06-16',
+        taskDate: '2026-06-18',
+        occurrenceDate: '2026-06-18',
+        endDate: '2026-06-20',
+        status: 'completed',
+        completedAt: '2026-06-17T01:00:00.000Z',
+      }),
+      completedOnDate: '2026-06-17',
+    } as TaskOccurrence & { completedOnDate: string };
+    useTaskStore.setState({
+      tasks: [completed],
+      tasksByDate: { '2026-06-18': [completed] },
+      visibleDates: ['2026-06-18'],
+      selectedDate: '2026-06-18',
+    });
+
+    render(<MainPage />);
+
+    expect(screen.queryByText('已经完成的多日任务')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '已完成任务' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a completed multi-day task visible on its completion occurrence date', () => {
+    const completed = baseTask({
+      id: 'completed-today',
+      title: '今天完成的多日任务',
+      sourceType: 'multi_day',
+      definitionTaskDate: '2026-06-16',
+      taskDate: '2026-06-17',
+      occurrenceDate: '2026-06-17',
+      endDate: '2026-06-20',
+      status: 'completed',
+      completedAt: '2026-06-17T01:00:00.000Z',
+      completedOnDate: '2026-06-17',
+    });
+    useTaskStore.setState({
+      tasks: [completed],
+      tasksByDate: { '2026-06-17': [completed] },
+      visibleDates: ['2026-06-17'],
+      selectedDate: '2026-06-17',
+    });
+
+    render(<MainPage />);
+
+    expect(within(screen.getByRole('region', { name: '已完成任务' }))
+      .getByText('今天完成的多日任务')).toBeInTheDocument();
+  });
+
+  it('hides completed subtasks after their boundary while preserving the parent badge and leaf rules', () => {
+    const parent = baseTask({ id: 'parent', title: '母任务', sourceType: 'multi_day', endDate: '2026-06-20' });
+    const completedChild = {
+      ...baseTask({
+        id: 'completed-child',
+        title: '已完成子任务',
+        parentTaskId: 'parent',
+        sourceType: 'multi_day',
+        endDate: '2026-06-20',
+        status: 'completed',
+        completedAt: '2026-06-17T01:00:00.000Z',
+        sortOrder: 1,
+      }),
+      completedOnDate: '2026-06-17',
+    } as TaskOccurrence & { completedOnDate: string };
+    const activeChild = baseTask({
+      id: 'active-child',
+      title: '进行中子任务',
+      parentTaskId: 'parent',
+      sourceType: 'multi_day',
+      endDate: '2026-06-20',
+      sortOrder: 2,
+    });
+    const selected = [parent, completedChild, activeChild].map((task) => ({
+      ...task,
+      taskDate: '2026-06-18',
+      occurrenceDate: '2026-06-18',
+    }));
+    useTaskStore.setState({
+      tasks: selected,
+      tasksByDate: { '2026-06-18': selected },
+      visibleDates: ['2026-06-18'],
+      selectedDate: '2026-06-18',
+    });
+
+    render(<MainPage />);
+
+    expect(screen.getByText('母任务')).toBeInTheDocument();
+    expect(screen.getByText('进行中子任务')).toBeInTheDocument();
+    expect(screen.queryByText('已完成子任务')).not.toBeInTheDocument();
+    expect(screen.getByText('1/2')).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: '任务进度：母任务' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '完成任务：母任务' })).toBeDisabled();
   });
 
   it('keeps an inconsistent completed parent with an active child in the active section', () => {

@@ -9,7 +9,7 @@ import type { Task, TaskPostponement, TaskPostponementRow, TaskProgressEntry, Ta
 
 const taskColumns = `
   id, user_id, device_id, title, content, task_date, end_date, status, priority, source_type,
-  routine_id, parent_task_id, sort_order, completed_at, archived_at, deleted_at, postponed_at,
+  routine_id, parent_task_id, sort_order, completed_at, completed_on_date, archived_at, deleted_at, postponed_at,
   created_at, updated_at, sync_status, version
 `;
 
@@ -109,12 +109,13 @@ export class TaskRepository {
                parent_task_id = $12,
                sort_order = $13,
                completed_at = $14,
-               archived_at = $15,
-               deleted_at = $16,
-               postponed_at = $17,
-               updated_at = $18,
-               sync_status = $19,
-               version = $20
+               completed_on_date = $15,
+               archived_at = $16,
+               deleted_at = $17,
+               postponed_at = $18,
+               updated_at = $19,
+               sync_status = $20,
+               version = $21
            WHERE id = $1`,
           taskToUpdateParams(task),
         );
@@ -125,7 +126,7 @@ export class TaskRepository {
   async insert(task: Task): Promise<void> {
     await executeWrite(
       `INSERT INTO tasks (${taskColumns})
-       VALUES (${placeholders(21)})`,
+       VALUES (${placeholders(22)})`,
       taskToParams(task),
     );
   }
@@ -154,12 +155,13 @@ export class TaskRepository {
            parent_task_id = $12,
            sort_order = $13,
            completed_at = $14,
-           archived_at = $15,
-           deleted_at = $16,
-           postponed_at = $17,
-           updated_at = $18,
-           sync_status = $19,
-           version = $20
+           completed_on_date = $15,
+           archived_at = $16,
+           deleted_at = $17,
+           postponed_at = $18,
+           updated_at = $19,
+           sync_status = $20,
+           version = $21
        WHERE id = $1`,
       taskToUpdateParams(task),
     );
@@ -168,7 +170,7 @@ export class TaskRepository {
   async upsert(task: Task): Promise<void> {
     await executeWrite(
       `INSERT INTO tasks (${taskColumns})
-       VALUES (${placeholders(21)})
+       VALUES (${placeholders(22)})
        ON CONFLICT(id) DO UPDATE SET
          user_id = excluded.user_id,
          device_id = excluded.device_id,
@@ -183,6 +185,7 @@ export class TaskRepository {
          parent_task_id = excluded.parent_task_id,
          sort_order = excluded.sort_order,
          completed_at = excluded.completed_at,
+         completed_on_date = excluded.completed_on_date,
          archived_at = excluded.archived_at,
          deleted_at = excluded.deleted_at,
          postponed_at = excluded.postponed_at,
@@ -358,6 +361,7 @@ export function mapTaskRow(row: TaskRow): Task {
     parentTaskId: row.parent_task_id,
     sortOrder: row.sort_order,
     completedAt: row.completed_at,
+    completedOnDate: row.completed_on_date ?? null,
     archivedAt: row.archived_at,
     deletedAt: row.deleted_at,
     postponedAt: row.postponed_at ?? null,
@@ -415,6 +419,7 @@ export function taskToParams(task: Task): unknown[] {
     task.parentTaskId,
     task.sortOrder,
     task.completedAt,
+    task.completedOnDate,
     task.archivedAt,
     task.deletedAt,
     task.postponedAt,
@@ -441,6 +446,7 @@ export function taskToUpdateParams(task: Task): unknown[] {
     task.parentTaskId,
     task.sortOrder,
     task.completedAt,
+    task.completedOnDate,
     task.archivedAt,
     task.deletedAt,
     task.postponedAt,
@@ -485,7 +491,7 @@ async function insertTask(db: TinyNoteDatabase, task: Task): Promise<void> {
   await executeInTransaction(
     db,
     `INSERT INTO tasks (${taskColumns})
-     VALUES (${placeholders(21)})`,
+     VALUES (${placeholders(22)})`,
     taskToParams(task),
   );
 }

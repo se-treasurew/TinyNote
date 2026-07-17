@@ -343,5 +343,45 @@ fn migrations() -> Vec<Migration> {
         "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "track_multi_day_completion_date",
+            sql: r#"
+            ALTER TABLE tasks ADD COLUMN completed_on_date TEXT;
+
+            WITH completion_boundaries AS (
+              SELECT task.id AS task_id,
+                     COALESCE(
+                       (
+                         SELECT entry.progress_date
+                         FROM task_progress_entries AS entry
+                         WHERE entry.task_id = task.id
+                           AND entry.status IN ('completed', 'archived')
+                           AND entry.deleted_at IS NULL
+                         ORDER BY entry.completed_at DESC, entry.updated_at DESC
+                         LIMIT 1
+                       ),
+                       substr(task.completed_at, 1, 10),
+                       task.task_date
+                     ) AS candidate_date
+              FROM tasks AS task
+              WHERE task.source_type = 'multi_day'
+                AND task.status IN ('completed', 'archived')
+            )
+            UPDATE tasks
+            SET completed_on_date = (
+              SELECT CASE
+                       WHEN candidate_date < tasks.task_date THEN tasks.task_date
+                       WHEN tasks.end_date IS NOT NULL AND candidate_date > tasks.end_date THEN tasks.end_date
+                       ELSE candidate_date
+                     END
+              FROM completion_boundaries
+              WHERE completion_boundaries.task_id = tasks.id
+            )
+            WHERE tasks.source_type = 'multi_day'
+              AND tasks.status IN ('completed', 'archived');
+        "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

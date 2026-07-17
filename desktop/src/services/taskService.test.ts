@@ -77,6 +77,7 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
   parentTaskId: null,
   sortOrder: 0,
   completedAt: null,
+  completedOnDate: null,
   archivedAt: null,
   deletedAt: null,
   postponedAt: null,
@@ -229,6 +230,45 @@ describe('task service occurrence and progress behavior', () => {
     expect(occurrence.postponementHistory).toEqual([history]);
   });
 
+  it('clamps a completed multi-day boundary when its schedule changes', async () => {
+    const task = baseTask({
+      sourceType: 'multi_day',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-20',
+      status: 'completed',
+      completedAt: '2026-06-18T01:00:00.000Z',
+      completedOnDate: '2026-06-18',
+    });
+    mocks.findById.mockResolvedValue(task);
+
+    await taskService.updateTask('task-1', {
+      taskDate: '2026-06-19',
+      endDate: '2026-06-22',
+    });
+
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      completedOnDate: '2026-06-19',
+    }));
+  });
+
+  it('clears the completion boundary when a multi-day task changes type', async () => {
+    const task = baseTask({
+      sourceType: 'multi_day',
+      taskDate: '2026-06-16',
+      endDate: '2026-06-20',
+      status: 'completed',
+      completedAt: '2026-06-18T01:00:00.000Z',
+      completedOnDate: '2026-06-18',
+    });
+    mocks.findById.mockResolvedValue(task);
+
+    await taskService.updateTask('task-1', { sourceType: 'manual' });
+
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      completedOnDate: null,
+    }));
+  });
+
   it('completes daily occurrences by writing progress state instead of saving the task definition', async () => {
     const task = baseTask({ sourceType: 'daily' });
     mocks.findById.mockResolvedValue(task);
@@ -258,6 +298,7 @@ describe('task service occurrence and progress behavior', () => {
     expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
       id: 'task-1',
       status: 'completed',
+      completedOnDate: '2026-06-18',
     }));
     expect(mocks.upsertProgressEntry).not.toHaveBeenCalled();
   });
@@ -269,6 +310,7 @@ describe('task service occurrence and progress behavior', () => {
       endDate: '2026-06-20',
       status: 'completed',
       completedAt: '2026-06-17T01:00:00.000Z',
+      ...({ completedOnDate: '2026-06-17' } as { completedOnDate: string }),
     });
     mocks.findById.mockResolvedValue(task);
 
@@ -278,6 +320,7 @@ describe('task service occurrence and progress behavior', () => {
       id: 'task-1',
       status: 'active',
       completedAt: null,
+      completedOnDate: null,
     }));
     expect(mocks.upsertProgressEntry).not.toHaveBeenCalled();
   });

@@ -103,7 +103,7 @@ export class TaskService {
   async updateTask(id: string, input: UpdateTaskInput): Promise<TaskOccurrence> {
     const task = await this.requireTask(id);
     const now = new Date().toISOString();
-    const updated: Task = {
+    const updatedDefinition: Task = {
       ...task,
       title: input.title === undefined ? task.title : normalizeTitle(input.title),
       content: input.content === undefined ? task.content : input.content,
@@ -115,6 +115,10 @@ export class TaskService {
       updatedAt: now,
       syncStatus: 'pending',
       version: task.version + 1,
+    };
+    const updated: Task = {
+      ...updatedDefinition,
+      completedOnDate: normalizeCompletionBoundary(updatedDefinition),
     };
 
     await taskRepository.save(updated);
@@ -135,15 +139,21 @@ export class TaskService {
       // so only top-level tasks (parentTaskId === null) reach here.
       const descendants = await this.collectDescendants(id);
       if (descendants.length > 0) {
-        const updatedDescendants = descendants.map((descendant) => ({
-          ...descendant,
-          sourceType: updated.sourceType,
-          taskDate: updated.taskDate,
-          endDate: updated.endDate,
-          updatedAt: now,
-          syncStatus: 'pending' as const,
-          version: descendant.version + 1,
-        }));
+        const updatedDescendants = descendants.map((descendant) => {
+          const updatedDescendant: Task = {
+            ...descendant,
+            sourceType: updated.sourceType,
+            taskDate: updated.taskDate,
+            endDate: updated.endDate,
+            updatedAt: now,
+            syncStatus: 'pending',
+            version: descendant.version + 1,
+          };
+          return {
+            ...updatedDescendant,
+            completedOnDate: normalizeCompletionBoundary(updatedDescendant),
+          };
+        });
         await taskRepository.saveMany(updatedDescendants);
         for (const descendant of updatedDescendants) {
           await writeSyncLog({ entityType: 'task', entityId: descendant.id, operation: 'update', payload: descendant });
@@ -506,7 +516,11 @@ export class TaskService {
     status: 'completed' | 'active',
   ): Promise<TaskOccurrence> {
     const now = new Date().toISOString();
-    const updated = status === 'completed' ? applyComplete(task, now) : applyRestore(task, now);
+    const statusUpdated = status === 'completed' ? applyComplete(task, now) : applyRestore(task, now);
+    const updated = {
+      ...statusUpdated,
+      completedOnDate: task.sourceType === 'multi_day' && status === 'completed' ? occurrenceDate : null,
+    };
     await taskRepository.save(updated);
     await writeSyncLog({ entityType: 'task', entityId: updated.id, operation: 'update', payload: updated });
     return this.taskToOccurrenceWithHistory(updated, occurrenceDate);
@@ -692,6 +706,7 @@ function createTask(input: {
     parentTaskId: input.parentTaskId,
     sortOrder: input.sortOrder,
     completedAt: null,
+    completedOnDate: null,
     archivedAt: null,
     deletedAt: null,
     postponedAt: null,
@@ -724,6 +739,21 @@ function createProgressEntry(input: {
     syncStatus: 'pending',
     version: (input.existing?.version ?? 0) + 1,
   };
+}
+
+function normalizeCompletionBoundary(task: Task): string | null {
+  if (task.sourceType !== 'multi_day' || (task.status !== 'completed' && task.status !== 'archived')) {
+    return null;
+  }
+
+  const candidate = task.completedOnDate ?? task.completedAt?.slice(0, 10) ?? task.taskDate;
+  if (candidate < task.taskDate) {
+    return task.taskDate;
+  }
+  if (task.endDate && candidate > task.endDate) {
+    return task.endDate;
+  }
+  return candidate;
 }
 
 function createPostponement(input: {

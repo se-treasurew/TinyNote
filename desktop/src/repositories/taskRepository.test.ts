@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   mapTaskPostponementRow,
   mapTaskProgressEntryRow,
+  mapTaskRow,
   taskPostponementToParams,
   taskProgressEntryToParams,
   taskToUpdateParams,
 } from './taskRepository';
-import type { Task, TaskPostponement, TaskPostponementRow, TaskProgressEntry, TaskProgressEntryRow } from '../types/task';
+import type { Task, TaskPostponement, TaskPostponementRow, TaskProgressEntry, TaskProgressEntryRow, TaskRow } from '../types/task';
 
-const task: Task = {
+const task = {
   id: 'task-1',
   userId: null,
   deviceId: 'device-a',
@@ -23,6 +24,7 @@ const task: Task = {
   parentTaskId: null,
   sortOrder: 7,
   completedAt: '2026-06-16T01:00:00.000Z',
+  completedOnDate: '2026-06-16',
   archivedAt: null,
   deletedAt: null,
   postponedAt: '2026-06-16T02:00:00.000Z',
@@ -30,7 +32,7 @@ const task: Task = {
   updatedAt: '2026-06-16T01:00:00.000Z',
   syncStatus: 'pending',
   version: 2,
-};
+} as Task & { completedOnDate: string | null };
 
 describe('task repository parameter mapping', () => {
   it('maps update parameters to the placeholders used by UPDATE tasks', () => {
@@ -49,6 +51,7 @@ describe('task repository parameter mapping', () => {
       null,
       7,
       '2026-06-16T01:00:00.000Z',
+      '2026-06-16',
       null,
       null,
       '2026-06-16T02:00:00.000Z',
@@ -56,6 +59,35 @@ describe('task repository parameter mapping', () => {
       'pending',
       2,
     ]);
+  });
+
+  it('maps the persisted completion boundary onto task definitions', () => {
+    const row = {
+      id: 'task-1',
+      user_id: null,
+      device_id: 'device-a',
+      title: '多日任务',
+      content: null,
+      task_date: '2026-06-16',
+      end_date: '2026-06-20',
+      status: 'completed',
+      priority: 'none',
+      source_type: 'multi_day',
+      routine_id: null,
+      parent_task_id: null,
+      sort_order: 0,
+      completed_at: '2026-06-18T01:00:00.000Z',
+      completed_on_date: '2026-06-18',
+      archived_at: null,
+      deleted_at: null,
+      postponed_at: null,
+      created_at: '2026-06-16T00:00:00.000Z',
+      updated_at: '2026-06-18T01:00:00.000Z',
+      sync_status: 'pending',
+      version: 2,
+    } as TaskRow & { completed_on_date: string | null };
+
+    expect((mapTaskRow(row) as Task & { completedOnDate?: string | null }).completedOnDate).toBe('2026-06-18');
   });
 
   it('maps progress entries to database rows and insert parameters', () => {

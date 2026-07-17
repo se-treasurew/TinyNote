@@ -27,6 +27,7 @@ const baseTask = (overrides: Partial<Task> = {}): Task => ({
   parentTaskId: null,
   sortOrder: 0,
   completedAt: null,
+  completedOnDate: null,
   archivedAt: null,
   deletedAt: null,
   postponedAt: null,

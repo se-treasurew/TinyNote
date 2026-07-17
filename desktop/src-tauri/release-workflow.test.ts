@@ -31,15 +31,17 @@ describe('GitHub release workflow', () => {
       encoding: 'utf8',
     });
 
+    expect(changelog).toContain('## [1.2.4]');
     expect(changelog).toContain('## [1.2.3]');
     expect(changelog).toContain('## [1.2.2]');
     expect(changelog).toContain('## [1.2.1]');
     expect(changelog).toContain('## [1.2.0]');
     expect(changelog).toContain('## [1.1.0]');
     expect(changelog).toContain('## [1.0.0]');
-    expect(notes).toContain('任务管理面板');
-    expect(notes).toContain('遮挡后续任务');
-    expect(notes).toContain('自动滚动到可视区域');
+    expect(notes).toContain('完成日之后不再展示');
+    expect(notes).toContain('完整任务树');
+    expect(notes).toContain('migration 10');
+    expect(notes).not.toContain('## [1.2.3]');
     expect(notes).not.toContain('## [1.2.2]');
     expect(notes).not.toContain('## [1.2.1]');
     expect(notes).not.toContain('## [1.2.0]');

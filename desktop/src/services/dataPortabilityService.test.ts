@@ -104,8 +104,33 @@ describe('data portability compatibility', () => {
     expect(mocks.upsertTask).toHaveBeenCalledWith(expect.objectContaining({
       id: 'task-1',
       postponedAt: null,
+      completedOnDate: null,
     }));
     expect(mocks.upsertPostponement).not.toHaveBeenCalled();
+  });
+
+  it('derives a completion boundary for legacy completed multi-day tasks', async () => {
+    await dataPortabilityService.importData({
+      schemaVersion: 3,
+      exportedAt: '2026-06-20T00:00:00.000Z',
+      tasks: [{
+        ...legacyTaskWithoutPostponedAt,
+        sourceType: 'multi_day',
+        taskDate: '2026-06-16',
+        endDate: '2026-06-20',
+        status: 'completed',
+        completedAt: '2026-06-18T01:00:00.000Z',
+      } as Task],
+      routines: [],
+      routineInstances: [],
+      taskProgressEntries: [],
+      taskPostponements: [],
+      settings: defaultSettings,
+    });
+
+    expect(mocks.upsertTask).toHaveBeenCalledWith(expect.objectContaining({
+      completedOnDate: '2026-06-18',
+    }));
   });
 
   it('imports schema version 3 postponement history', async () => {

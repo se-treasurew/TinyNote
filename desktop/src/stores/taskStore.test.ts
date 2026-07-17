@@ -45,6 +45,7 @@ const baseTask = (overrides: Partial<TaskOccurrence> = {}): TaskOccurrence => ({
   parentTaskId: null,
   sortOrder: 0,
   completedAt: null,
+  completedOnDate: null,
   archivedAt: null,
   deletedAt: null,
   postponedAt: null,

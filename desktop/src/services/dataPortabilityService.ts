@@ -45,10 +45,12 @@ export const dataPortabilityService = {
     const localRoutineMap = new Map(localRoutines.map((routine) => [routine.id, routine]));
     const localProgressMap = new Map(localProgressEntries.map((entry) => [entry.id, entry]));
     const localPostponementMap = new Map(localPostponements.map((postponement) => [postponement.id, postponement]));
+    const importedProgressEntries = 'taskProgressEntries' in payload ? payload.taskProgressEntries : [];
+    const completedProgressDateByTask = latestCompletedProgressDates(importedProgressEntries);
 
     for (const incoming of payload.tasks) {
       const local = localTaskMap.get(incoming.id);
-      const normalized = normalizeImportedTask(incoming);
+      const normalized = normalizeImportedTask(incoming, completedProgressDateByTask.get(incoming.id));
       const merged = local ? chooseMergedRecord(local, normalized) : normalized;
       await taskRepository.upsert(merged);
       await writeSyncLog({ entityType: 'task', entityId: merged.id, operation: 'import', payload: merged });
@@ -109,16 +111,55 @@ function assertPayload(payload: TinyNoteImport): void {
   }
 }
 
-function normalizeImportedTask(task: Task): Task {
+function normalizeImportedTask(task: Task, completedProgressDate?: string): Task {
   const sourceType = String(task.sourceType);
+  const normalizedSourceType = sourceType === 'routine_daily' ? 'daily' : task.sourceType;
+  const normalizedStatus = task.status === 'archived' ? 'completed' : task.status;
+  const storedCompletionDate = (task as Task & { completedOnDate?: string | null }).completedOnDate;
   return {
     ...task,
     endDate: task.endDate ?? null,
     postponedAt: task.postponedAt ?? null,
-    sourceType: sourceType === 'routine_daily' ? 'daily' : task.sourceType,
-    status: task.status === 'archived' ? 'completed' : task.status,
+    completedOnDate: resolveImportedCompletionDate(
+      task,
+      normalizedSourceType,
+      normalizedStatus,
+      storedCompletionDate ?? completedProgressDate ?? task.completedAt?.slice(0, 10),
+    ),
+    sourceType: normalizedSourceType,
+    status: normalizedStatus,
     archivedAt: task.status === 'archived' ? null : task.archivedAt,
   } as Task;
+}
+
+function latestCompletedProgressDates(entries: TaskProgressEntry[]): Map<string, string> {
+  const latest = new Map<string, TaskProgressEntry>();
+  for (const entry of entries) {
+    if ((entry.status !== 'completed' && entry.status !== 'archived') || entry.deletedAt) {
+      continue;
+    }
+    const current = latest.get(entry.taskId);
+    if (!current || entry.updatedAt > current.updatedAt) {
+      latest.set(entry.taskId, entry);
+    }
+  }
+  return new Map(Array.from(latest, ([taskId, entry]) => [taskId, entry.progressDate]));
+}
+
+function resolveImportedCompletionDate(
+  task: Task,
+  sourceType: Task['sourceType'],
+  status: Task['status'],
+  candidate: string | null | undefined,
+): string | null {
+  if (sourceType !== 'multi_day' || (status !== 'completed' && status !== 'archived')) {
+    return null;
+  }
+
+  const date = candidate ?? task.taskDate;
+  if (date < task.taskDate) return task.taskDate;
+  if (task.endDate && date > task.endDate) return task.endDate;
+  return date;
 }
 
 function normalizeImportedProgressEntry(entry: TaskProgressEntry): TaskProgressEntry {

@@ -34,8 +34,9 @@ export function MainPage() {
   const isAboutOpen = useUiStore((state) => state.isAboutOpen);
   const selectedTasks = tasksByDate[selectedDate] ?? [];
   const trees = useMemo(() => groupTasksWithSubtasks(selectedTasks), [selectedTasks]);
-  const activeTrees = trees.filter(treeHasActiveOccurrence);
-  const doneTrees = trees.filter(
+  const displayableTrees = trees.filter(treeShouldDisplay);
+  const activeTrees = displayableTrees.filter(treeHasActiveOccurrence);
+  const doneTrees = displayableTrees.filter(
     (tree) => !treeHasActiveOccurrence(tree) && (tree.task.status === 'completed' || tree.task.status === 'archived'),
   );
   const canPostponeSelectedDate = selectedTasks.some((task) => isBatchPostponeEligibleTask(task, selectedDate));
@@ -130,6 +131,7 @@ export function MainPage() {
   function renderTree(node: TaskTreeNode, depth: number) {
     const hasSubtasks = node.subtasks.length > 0;
     const badge = hasSubtasks ? subtaskBadge(node.subtasks.map((child) => child.task)) : undefined;
+    const visibleSubtasks = node.subtasks.filter(treeShouldDisplay);
     const isCollapsed = collapsedParentIds.has(node.task.id);
     return (
       <div className="task-tree" key={node.task.id}>
@@ -142,7 +144,7 @@ export function MainPage() {
           onToggleCollapse={() => toggleCollapse(node.task.id)}
           onRequestAddSubtask={() => startAddSubtask(node.task.id)}
         />
-        {!isCollapsed && node.subtasks.map((child) => renderTree(child, depth + 1))}
+        {!isCollapsed && visibleSubtasks.map((child) => renderTree(child, depth + 1))}
         {!isCollapsed && addingSubtaskParentId === node.task.id && (
           <div className={`subtask-add-row subtask-add-row--depth-${Math.min(depth + 1, 2)}`}>
             <input
@@ -309,6 +311,20 @@ export function MainPage() {
 
 function treeHasActiveOccurrence(tree: TaskTreeNode): boolean {
   return tree.task.status === 'active' || tree.subtasks.some(treeHasActiveOccurrence);
+}
+
+function treeShouldDisplay(tree: TaskTreeNode): boolean {
+  return shouldDisplayOccurrence(tree.task) || tree.subtasks.some(treeHasActiveOccurrence);
+}
+
+function shouldDisplayOccurrence(task: TaskTreeNode['task']): boolean {
+  const isDone = task.status === 'completed' || task.status === 'archived';
+  return !(
+    task.sourceType === 'multi_day'
+    && isDone
+    && task.completedOnDate
+    && task.occurrenceDate > task.completedOnDate
+  );
 }
 
 function formatMonthDay(isoDate: string): string {

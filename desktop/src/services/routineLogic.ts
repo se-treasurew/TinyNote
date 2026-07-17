@@ -90,6 +90,7 @@ function createTaskDraft(input: {
     parentTaskId: null,
     sortOrder: input.sortOrder,
     completedAt: null,
+    completedOnDate: null,
     archivedAt: null,
     deletedAt: null,
     postponedAt: null,
