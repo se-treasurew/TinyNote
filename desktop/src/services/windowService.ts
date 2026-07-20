@@ -51,7 +51,10 @@ export const windowService = {
   },
 
   async minimizeWindow(): Promise<void> {
-    await getCurrentWindow().minimize();
+    // Minimize hides to the system tray (no taskbar entry) rather than using a
+    // standard minimize. Restore via the tray "打开 / 隐藏" item. This mirrors
+    // the close-to-tray behavior (lib.rs intercepts CloseRequested → hide).
+    await getCurrentWindow().hide();
   },
 
   ensureUsableWindowBounds,

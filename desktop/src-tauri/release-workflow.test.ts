@@ -31,6 +31,7 @@ describe('GitHub release workflow', () => {
       encoding: 'utf8',
     });
 
+    expect(changelog).toContain('## [1.2.6]');
     expect(changelog).toContain('## [1.2.5]');
     expect(changelog).toContain('## [1.2.4]');
     expect(changelog).toContain('## [1.2.3]');
@@ -39,9 +40,9 @@ describe('GitHub release workflow', () => {
     expect(changelog).toContain('## [1.2.0]');
     expect(changelog).toContain('## [1.1.0]');
     expect(changelog).toContain('## [1.0.0]');
-    expect(notes).toContain('只剩日期栏');
-    expect(notes).toContain('window-state');
-    expect(notes).toContain('tinynote.db');
+    expect(notes).toContain('隐藏到系统托盘');
+    expect(notes).toContain('任务栏');
+    expect(notes).not.toContain('## [1.2.5]');
     expect(notes).not.toContain('## [1.2.4]');
     expect(notes).not.toContain('## [1.2.3]');
     expect(notes).not.toContain('## [1.2.2]');

@@ -77,6 +77,14 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 
 核心逻辑在 `src/services/taskOccurrence.ts`：`shouldShowTaskOnDate` 控制可见性，`resolveInheritedProgressEntry` 控制多日进度顺延（仅 multi_day + `date <= today`，未来日期不继承；硬编码行为，不再依赖设置项）。多日任务一旦任务本体完成，所有 occurrence 都显示为已完成；每日任务仍只完成当天。注意：`carryProgressForward` 设置已从 `AppSettings` 移除，CLAUDE.md 早期版本曾记载该设置，现已不适用。
 
+## 多日完成边界 (completed_on_date)
+
+`tasks.completed_on_date`（migration 10 新增）记录多日任务的完成日。已完成的 multi_day 任务不再在截止日内的每一天都显示为「已完成」，而是只在「完成日及此前」保留为已完成的历史 occurrence，完成日之后不再展示（`MainPage.shouldDisplayOccurrence` 用 `task.occurrenceDate > task.completedOnDate` 过滤）。恢复（restore）多日任务会清空 `completed_on_date`，使任务重新显示到原截止日。每日 / 普通 / 延期副本的完成规则不受此边界影响。
+
+- `taskService.completeTask` 写入 `completed_on_date = occurrenceDate`（multi_day + completed）；`restoreTask`/`applyRestore` 清空。
+- `normalizeCompletionBoundary`（taskService）在 `updateTask`/排期传播时校正后代边界；导入流程 `resolveImportedCompletionDate`（dataPortabilityService）按同规则补齐历史 JSON。
+- 已完成子任务在完成边界后的日期会隐藏，但父任务的子任务数量、完成进度和完成约束仍按完整任务树计算。
+
 ## 顺延 (Postpone) 机制
 
 底部栏「顺延」按钮批量推迟选定日期的活跃任务到次日，仅对 `manual` 和 `multi_day` 生效（`daily` 每日清零不顺延）。核心逻辑在 `src/services/taskScheduling.ts`：
@@ -113,15 +121,15 @@ npm.cmd run build       # 3. 前端构建（tsc + vite build）
 ## 关键技术细节
 
 - **Tauri 插件**：SQL、window-state、notification、autostart、updater、process、opener。确认弹窗使用自研 `ConfirmDialog`；权限定义在 `src-tauri/capabilities/default.json`。
-- **窗口行为**：无边框窗口（自定义标题栏 `TitleBar.tsx`）。关闭时隐藏到托盘而非退出。透明背景支持毛玻璃主题。
-- **主题系统**：7 套主题，通过 CSS 自定义属性实现（`src/styles/global.css`）。通过 `document.documentElement.dataset.theme` 切换。毛玻璃主题使用 `backdrop-filter: blur(22px)`。窗口透明度可配置（默认 0.82）。
+- **窗口行为**：无边框窗口（自定义标题栏 `TitleBar.tsx`）。关闭与最小化都隐藏到托盘而非退出/留在任务栏（最小化走 `windowService.minimizeWindow`→`hide()`，关闭由 Rust 拦截 `CloseRequested`→`hide()`）；恢复靠托盘「打开 / 隐藏」。透明背景支持毛玻璃主题。
+- **主题系统**：7 套主题，通过 CSS 自定义属性实现（`src/styles/global.css`）。通过 `document.documentElement.dataset.theme` 切换。毛玻璃主题使用 `backdrop-filter: blur(22px)`。窗口透明度通过 CSS 变量 `--window-opacity` 驱动（`windowService.applySettings` 设到 `<html>` 上，`.app-shell` 背景的 `--bg` 与渐变层都乘以该变量），可在设置面板 0%–100% 全范围调节（默认 0.82），不做 0.72 之类二次封顶。
 - **测试**：Vitest 2 + jsdom + `@testing-library/react` + `@testing-library/jest-dom`。Tauri API 通过 `vi.mock()` 模拟。配置文件 `src/test/setup.ts`。
 - **Rust 入口**：`src-tauri/src/lib.rs` 包含插件注册、系统托盘设置、关闭事件拦截和全部 SQLite 迁移 SQL。
 - **日期条交互**：`MainPage` 的日期条在 `selectedDate` 变化时自动将选中标签 `scrollIntoView` 到可视区域中央（jsdom 测试中需用 `typeof tab.scrollIntoView === 'function'` 守卫）。
 
 ## 版本
 
-当前版本 **1.2.2**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
+当前版本 **1.2.6**。版本以 `desktop/src-tauri/tauri.conf.json` 为准，`package.json` 与 `Cargo.toml` 保持一致。`TitleBar` 通过 Tauri 运行时 `getVersion()` 读取版本号，不要硬编码；每次发布同时更新 `CHANGELOG.md`。
 
 ## 应用图标
 

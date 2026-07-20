@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   scaleFactor: vi.fn(),
   setSize: vi.fn(),
   unminimize: vi.fn(),
+  hide: vi.fn(),
   saveWindowState: vi.fn(),
 }));
 
@@ -23,6 +24,7 @@ vi.mock('@tauri-apps/api/window', () => {
       scaleFactor: mocks.scaleFactor,
       setSize: mocks.setSize,
       unminimize: mocks.unminimize,
+      hide: mocks.hide,
     }),
     LogicalSize,
     LogicalPosition,
@@ -43,7 +45,14 @@ describe('window service bounds recovery', () => {
     mocks.scaleFactor.mockResolvedValue(1.5);
     mocks.setSize.mockResolvedValue(undefined);
     mocks.unminimize.mockResolvedValue(undefined);
+    mocks.hide.mockResolvedValue(undefined);
     mocks.saveWindowState.mockResolvedValue(undefined);
+  });
+
+  it('hides the window to the tray (no taskbar) when minimized', async () => {
+    await windowService.minimizeWindow();
+
+    expect(mocks.hide).toHaveBeenCalledTimes(1);
   });
 
   it('restores a minimized Windows size to the default logical bounds', async () => {
